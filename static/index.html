@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GeoAI Flood Risk Dashboard – Ernakulam</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+    header { padding: 10px 20px; background: #1a1d27; border-bottom: 2px solid #2e3250; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 1.15rem; color: #7ec8e3; }
+    header span { font-size: 0.78rem; color: #888; }
+    #main { display: flex; flex: 1; overflow: hidden; }
+    #sidebar { width: 300px; min-width: 260px; background: #1a1d27; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+    #map { flex: 1; }
+    .card { background: #23263a; border-radius: 8px; padding: 14px; }
+    .card h3 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: .08em; color: #7ec8e3; margin-bottom: 10px; }
+    label { font-size: 0.8rem; color: #b0b8c8; display: block; margin-bottom: 4px; }
+    input[type=range] { width: 100%; accent-color: #4488ee; }
+    #rain-val { font-size: 1.1rem; font-weight: 700; color: #f0c060; margin-top: 4px; }
+    select, input[type=text] { width: 100%; padding: 6px 8px; border-radius: 5px; border: 1px solid #3a3f5a; background: #0f1117; color: #e0e0e0; font-size: 0.82rem; }
+    button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.82rem; transition: background .15s; }
+    .btn-primary { background: #2b5ee8; color: #fff; }
+    .btn-primary:hover { background: #3d70fa; }
+    .btn-warn { background: #c0392b; color: #fff; }
+    .btn-warn:hover { background: #e74c3c; }
+    #alert-banner { display: none; background: #5c1010; border: 1px solid #e74c3c; border-radius: 6px; padding: 10px; font-size: 0.8rem; color: #f5b7b1; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-box { background: #0f1117; border-radius: 6px; padding: 8px; text-align: center; }
+    .stat-box .val { font-size: 1.1rem; font-weight: 700; }
+    .stat-box .lbl { font-size: 0.68rem; color: #888; }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; margin-bottom: 4px; }
+    .legend-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+    .layer-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; margin-bottom: 6px; }
+    .toggle { position: relative; width: 36px; height: 20px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider-t { position: absolute; inset: 0; background: #3a3f5a; border-radius: 20px; cursor: pointer; transition: .3s; }
+    .slider-t:before { content: ""; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .3s; }
+    input:checked + .slider-t { background: #2b5ee8; }
+    input:checked + .slider-t:before { transform: translateX(16px); }
+    #status-bar { padding: 6px 16px; background: #12141f; font-size: 0.72rem; color: #555; }
+    #status-text { color: #7ec8e3; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span>🌊</span>
+  <h1>GeoAI Flood Risk Dashboard</h1>
+  <span>Ernakulam District, Kerala · CNN-based Spatial Learning</span>
+</header>
+
+<div id="main">
+  <div id="sidebar">
+
+    <!-- Rainfall Slider -->
+    <div class="card">
+      <h3>🌧 Rainfall Scenario</h3>
+      <label for="rain-slider">Intensity (mm/day)</label>
+      <input type="range" id="rain-slider" min="0" max="300" value="150" step="10"/>
+      <div id="rain-val">150 mm</div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button class="btn-primary" onclick="applyRainfall()">Apply</button>
+        <button class="btn-warn" onclick="simulate2018()">2018 Flood (300mm)</button>
+      </div>
+    </div>
+
+    <!-- Alert -->
+    <div id="alert-banner">
+      ⚠️ <strong>HIGH RISK ALERT:</strong> Rainfall exceeds 200mm and critical zones detected. Evacuation recommended.
+    </div>
+
+    <!-- Layer Toggles -->
+    <div class="card">
+      <h3>🗺 Layers</h3>
+      <div class="layer-row">Flood Risk Overlay
+        <label class="toggle"><input type="checkbox" id="tog-risk" checked onchange="toggleLayer('risk', this.checked)"><span class="slider-t"></span></label>
+      </div>
+      <div class="layer-row">Drainage Network
+        <label class="toggle"><input type="checkbox" id="tog-drain" onchange="toggleLayer('drain', this.checked)"><span class="slider-t"></span></label>
+      </div>
+      <div class="layer-row">Built-up Areas
+        <label class="toggle"><input type="checkbox" id="tog-builtup" onchange="toggleLayer('builtup', this.checked)"><span class="slider-t"></span></label>
+      </div>
+    </div>
+
+    <!-- Risk Stats -->
+    <div class="card" id="stats-card">
+      <h3>📊 Risk Distribution</h3>
+      <div class="stat-grid" id="stats-grid">
+        <div class="stat-box"><div class="val" id="s-safe">–</div><div class="lbl">🟢 Safe</div></div>
+        <div class="stat-box"><div class="val" id="s-mod">–</div><div class="lbl">🟡 Moderate</div></div>
+        <div class="stat-box"><div class="val" id="s-high">–</div><div class="lbl">🟠 High</div></div>
+        <div class="stat-box"><div class="val" id="s-crit">–</div><div class="lbl">🔴 Critical</div></div>
+      </div>
+    </div>
+
+    <!-- Place Search -->
+    <div class="card">
+      <h3>🔍 Search Location</h3>
+      <input type="text" id="place-input" list="place-list" placeholder="e.g. Edappally"/>
+      <datalist id="place-list"></datalist>
+      <button class="btn-primary" style="margin-top:8px; width:100%;" onclick="searchPlace()">Go</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="card">
+      <h3>🎨 Risk Legend</h3>
+      <div class="legend-item"><div class="legend-swatch" style="background:#1a9850"></div> Safe (< 10%)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#91cf60"></div> Low (10–20%)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fee08b"></div> Moderate (20–35%)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fdae61"></div> High (35–50%)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#d73027"></div> Critical (> 50%)</div>
+    </div>
+
+  </div>
+
+  <div id="map"></div>
+</div>
+<div id="status-bar">Status: <span id="status-text">Ready</span> &nbsp;|&nbsp; Click on map to inspect pixel risk.</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const API = "";  // same origin
+const MAP_CENTER = [10.03, 76.33];
+const ZOOM = 10;
+
+const map = L.map('map').setView(MAP_CENTER, ZOOM);
+
+// Basemap
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap & CartoDB', maxZoom: 18
+}).addTo(map);
+
+let overlayRisk = null;
+let overlayDrain = null;
+let overlayBuiltup = null;
+let places = {};
+
+// ------- On load -------
+async function init() {
+  setStatus("Loading places…");
+  const r = await fetch(`${API}/api/places`);
+  places = await r.json();
+  const dl = document.getElementById('place-list');
+  Object.keys(places).forEach(p => {
+    const opt = document.createElement('option'); opt.value = p; dl.appendChild(opt);
+  });
+
+  setStatus("Loading flood scenario…");
+  await loadRasterOverlay(150);
+  await loadStats(150);
+  setStatus("Ready");
+}
+
+// ------- Rainfall Slider -------
+document.getElementById('rain-slider').addEventListener('input', function() {
+  document.getElementById('rain-val').textContent = this.value + " mm";
+  checkAlert(parseInt(this.value));
+});
+
+async function applyRainfall() {
+  const mm = parseInt(document.getElementById('rain-slider').value);
+  setStatus(`Loading flood map for ${mm}mm…`);
+  await loadRasterOverlay(mm);
+  await loadStats(mm);
+  setStatus("Ready");
+}
+
+function simulate2018() {
+  document.getElementById('rain-slider').value = 300;
+  document.getElementById('rain-val').textContent = "300 mm";
+  checkAlert(300);
+  applyRainfall();
+}
+
+// ------- Load Risk Overlay -------
+async function loadRasterOverlay(mm) {
+  // Snap to nearest scenario (100, 150, 200, 300→200)
+  const scenarios = [100, 150, 200];
+  const snapped = scenarios.reduce((a,b) => Math.abs(b-mm)<Math.abs(a-mm)?b:a);
+  const resp = await fetch(`${API}/api/map/${snapped}`);
+  if (!resp.ok) { setStatus(`⚠️ No map for ${snapped}mm. Run inference first.`); return; }
+  const data = await resp.json();
+
+  if (overlayRisk) map.removeLayer(overlayRisk);
+  overlayRisk = L.imageOverlay(
+    "data:image/png;base64," + data.image_b64,
+    data.bounds,
+    { opacity: 0.75, interactive: false }
+  ).addTo(map);
+  map.fitBounds(data.bounds);
+}
+
+// ------- Stats -------
+async function loadStats(mm) {
+  const scenarios = [100, 150, 200];
+  const snapped = scenarios.reduce((a,b) => Math.abs(b-mm)<Math.abs(a-mm)?b:a);
+  const resp = await fetch(`${API}/api/risk_stats/${snapped}`);
+  if (!resp.ok) return;
+  const d = await resp.json();
+  document.getElementById('s-safe').textContent = d.safe_pct + "%";
+  document.getElementById('s-mod').textContent  = d.moderate_pct + "%";
+  document.getElementById('s-high').textContent = d.high_pct + "%";
+  document.getElementById('s-crit').textContent = d.critical_pct + "%";
+}
+
+// ------- Layer Toggles -------
+function toggleLayer(name, visible) {
+  if (name==='risk' && overlayRisk)    { visible ? map.addLayer(overlayRisk)    : map.removeLayer(overlayRisk); }
+  if (name==='drain' && overlayDrain)  { visible ? map.addLayer(overlayDrain)   : map.removeLayer(overlayDrain); }
+  if (name==='builtup' && overlayBuiltup){ visible ? map.addLayer(overlayBuiltup) : map.removeLayer(overlayBuiltup); }
+}
+
+// ------- Place Search -------
+function searchPlace() {
+  const q = document.getElementById('place-input').value.trim();
+  const match = Object.keys(places).find(p => p.toLowerCase().includes(q.toLowerCase()));
+  if (!match) { alert("Place not found. Try: Edappally, Aluva, Kaloor…"); return; }
+  map.setView(places[match], 13);
+  L.popup().setLatLng(places[match]).setContent(`<b>${match}</b>`).openOn(map);
+}
+
+// ------- Alert Logic -------
+function checkAlert(mm) {
+  const banner = document.getElementById('alert-banner');
+  banner.style.display = (mm >= 200) ? 'block' : 'none';
+}
+
+// ------- Map Click Inspection -------
+map.on('click', function(e) {
+  setStatus(`Clicked: ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)} – Flood probability shown in overlay.`);
+});
+
+// ------- Helpers -------
+function setStatus(msg) { document.getElementById('status-text').textContent = msg; }
+
+init();
+</script>
+</body>
+</html>
