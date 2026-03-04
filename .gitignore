@@ -1,8 +1,5 @@
 __pycache__/
 *.pyc
 .env
-*.tif
-*.pth
 processed/
-outputs/
 .ipynb_checkpoints/
