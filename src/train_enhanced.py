@@ -44,8 +44,8 @@ def train_enhanced():
     stack, label, profile = load_real_flood_data()
     X_numpy, y_numpy = extract_balanced_patches_enhanced(
         stack, label, 
-        patch_size=32, 
-        num_patches=15000,  # More patches for better training
+        patch_size=128, 
+        num_patches=5000,  # Balanced for memory at 128x128
         flood_ratio=0.5
     )
     
@@ -70,8 +70,8 @@ def train_enhanced():
     print(f"   Val batches: {len(val_loader)}")
     
     # Model
-    print("\n[MODEL] Initializing Attention U-Net...")
-    model = AttentionUNet(n_channels=4, n_classes=1).to(DEVICE)
+    print("\n[MODEL] Initializing Attention U-Net with 10 Input Channels...")
+    model = AttentionUNet(n_channels=10, n_classes=1).to(DEVICE)
     
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -79,10 +79,12 @@ def train_enhanced():
     print(f"   Trainable parameters: {trainable_params:,}")
     
     # Loss and optimizer
-    criterion = CombinedLoss(alpha=0.75, gamma=2.0, focal_weight=0.7, dice_weight=0.3)
+    criterion = CombinedLoss(alpha=0.85, gamma=2.0, focal_weight=0.7, dice_weight=0.3)
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=3
+    scheduler = optim.lr_scheduler.OneCycleLR(
+        optimizer, max_lr=LEARNING_RATE*10, 
+        steps_per_epoch=len(train_loader), 
+        epochs=EPOCHS
     )
     
     # Training history
@@ -114,6 +116,7 @@ def train_enhanced():
             loss = criterion(outputs, targets)
             loss.backward()
             optimizer.step()
+            scheduler.step()
             
             train_loss += loss.item() * inputs.size(0)
             
@@ -136,8 +139,8 @@ def train_enhanced():
                 loss = criterion(outputs, targets)
                 val_loss += loss.item() * inputs.size(0)
                 
-                # Update metrics
-                evaluator.update(outputs, targets)
+            # Update metrics
+            evaluator.update(outputs, targets)
         
         epoch_val_loss = val_loss / len(val_dataset)
         history['val_loss'].append(epoch_val_loss)
@@ -148,9 +151,6 @@ def train_enhanced():
         history['val_f1'].append(val_metrics['f1'])
         history['val_precision'].append(val_metrics['precision'])
         history['val_recall'].append(val_metrics['recall'])
-        
-        # Learning rate scheduling
-        scheduler.step(epoch_val_loss)
         
         # Print epoch summary
         print(f"\n[EPOCH] Epoch {epoch+1}/{EPOCHS} Summary:")

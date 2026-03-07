@@ -215,7 +215,7 @@ class FloodEvaluationMetrics:
         print("FLOOD PREDICTION EVALUATION REPORT")
         print("=" * 60)
         
-        print("\n📊 Binary Classification Metrics:")
+        print("\nBinary Classification Metrics:")
         print(f"  IoU (Jaccard):        {metrics['iou']:.4f}")
         print(f"  Dice Coefficient:     {metrics['dice']:.4f}")
         print(f"  Precision:            {metrics['precision']:.4f}")
@@ -224,11 +224,11 @@ class FloodEvaluationMetrics:
         if 'specificity' in metrics:
             print(f"  Specificity:          {metrics['specificity']:.4f}")
         
-        print("\n📈 Probabilistic Metrics:")
+        print("\nProbabilistic Metrics:")
         print(f"  ROC-AUC:              {metrics['roc_auc']:.4f}")
         print(f"  PR-AUC:               {metrics['pr_auc']:.4f}")
         
-        print("\n🔢 Confusion Matrix:")
+        print("\nConfusion Matrix:")
         if 'true_positive' in metrics:
             print(f"  True Positives:       {metrics['true_positive']:,}")
             print(f"  True Negatives:       {metrics['true_negative']:,}")

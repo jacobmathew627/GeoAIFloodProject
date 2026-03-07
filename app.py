@@ -31,13 +31,16 @@ with col3:
 
 import requests
 
+# App-level Alert Placeholder
+alert_placeholder = st.empty()
+
 # Sidebar
 st.sidebar.header("🎛️ Controls")
 
 # Advanced Mode Toggle
 advanced_mode = st.sidebar.checkbox("🔬 Advanced Analytics Mode", value=False)
 
-layer_type = st.sidebar.radio("📊 Select Layer", ["Flood Probability", "DEM", "Slope", "LULC", "TWI", "SPI", "STI", "HAND", "TPI", "Distance to Water", "Distance to Built-up", "SAR VV (Filtered)", "SAR VH (Filtered)"])
+layer_type = st.sidebar.radio("📊 Select Layer", ["Flood Probability", "DEM", "Slope", "LULC", "TWI", "SPI", "STI", "HAND", "TPI", "Distance to Water", "Distance to Built-up", "SAR VV (Radar)", "SAR VH (Radar)", "NDVI (Vegetation)", "NDWI (Water)"])
 
 # AI Model Configuration (Session State for stability)
 if 'model_mode_idx' not in st.session_state:
@@ -175,8 +178,10 @@ def load_static_layer(layer):
     elif layer == "TPI": path = os.path.join("processed", "TPI_aligned.tif")
     elif layer == "Distance to Water": path = os.path.join("processed", "DistWater_aligned.tif")
     elif layer == "Distance to Built-up": path = os.path.join("processed", "DistUrban_aligned.tif")
-    elif layer == "SAR VV (Filtered)": path = os.path.join("processed", "SAR_VV_aligned.tif")
-    elif layer == "SAR VH (Filtered)": path = os.path.join("processed", "SAR_VH_aligned.tif")
+    elif layer == "SAR VV (Radar)": path = os.path.join("processed", "SAR_VV_aligned.tif")
+    elif layer == "SAR VH (Radar)": path = os.path.join("processed", "SAR_VH_aligned.tif")
+    elif layer == "NDVI (Vegetation)": path = os.path.join("processed", "NDVI_aligned.tif")
+    elif layer == "NDWI (Water)": path = os.path.join("processed", "NDWI_aligned.tif")
     
     if not os.path.exists(path): 
         st.warning(f"File not found: {path}")
@@ -258,11 +263,16 @@ if layer_type == "Flood Probability":
                 st.sidebar.warning("Viewing Pure Physical Flow. Ignores AI learned patterns.")
                 
             else: # Hybrid
+                original_mask = data < -100
                 # Combine: Take the WORST CASE of AI prediction or Physical Reality
                 data = np.maximum(data, phys_risk)
+                # Restore mask since np.maximum(-9999, 0) == 0
+                data[original_mask] = -9999
             
-            # Clip
+            # Clip, preserving nodata
+            mask = data < -100
             data = np.clip(data, 0, 1.0)
+            data[mask] = -9999
 
 else:
     data, meta = load_static_layer(layer_type)
@@ -316,6 +326,21 @@ if data is not None:
     if data is not None:
         # Robust Masking: Ignore results of bilinear smearing near nodata
         data_masked = np.ma.masked_less(data, -9000)
+        
+        # --- ALERT LOGIC ---
+        if layer_type == "Flood Probability":
+            valid_pixels = data_masked.compressed()
+            if valid_pixels.size > 0:
+                high_risk_pixels = np.sum(valid_pixels >= 0.2)
+                risk_percentage = (high_risk_pixels / valid_pixels.size) * 100
+                
+                if risk_percentage > 20:
+                    alert_placeholder.error(f"🚨 **CRITICAL**: Severe flood risk detected! Widespread inundation highly probable ({risk_percentage:.1f}% area affected). Issue emergency warnings.")
+                elif risk_percentage > 10:
+                    alert_placeholder.warning(f"⚠️ **WARNING**: Elevated flood risk identified ({risk_percentage:.1f}% area affected). Monitor vulnerable low-lying areas.")
+                else:
+                    alert_placeholder.success(f"✅ **CONDITIONS NORMAL**: No immediate significant flood threat detected based on current inputs ({risk_percentage:.1f}% area affected).")
+        # -------------------
 
     # 1. FLOOD PROBABILITY
     if layer_type == "Flood Probability":
@@ -561,7 +586,8 @@ if data is not None:
         if len(valid_vals) > 0:
             vmin, vmax = np.percentile(valid_vals, 2), np.percentile(valid_vals, 98)
             norm = plt.Normalize(vmin=vmin, vmax=vmax)
-            image_rgba = cmap(norm(data_masked.filled(nodata)))
+            fill_val = nodata if nodata is not None else -9999
+            image_rgba = cmap(norm(data_masked.filled(fill_val)))
         else:
             image_rgba = np.zeros((*data_masked.shape, 4))
             
@@ -569,8 +595,25 @@ if data is not None:
         legend_html = create_legend(layer_type, [("High Reflectance", "#ffffff"), ("Low Reflectance", "#000000")])
         m.get_root().html.add_child(folium.Element(legend_html))
 
+    # 13. NDVI
+    elif "NDVI" in layer_type:
+        cmap = plt.get_cmap('RdYlGn') 
+        norm = plt.Normalize(vmin=-0.2, vmax=0.8)
+        image_rgba = cmap(norm(data_masked.filled(0)))
+        image_rgba[..., 3] = np.where(data_masked.mask, 0.0, 0.8)
+        legend_html = create_legend("NDVI (Healthy Veg)", [("Dense", "#1a9850"), ("Sparse", "#fee08b"), ("None", "#d73027")])
+        m.get_root().html.add_child(folium.Element(legend_html))
+
+    # 14. NDWI
+    elif "NDWI" in layer_type:
+        cmap = plt.get_cmap('RdBu') 
+        norm = plt.Normalize(vmin=-0.5, vmax=0.5)
+        image_rgba = cmap(norm(data_masked.filled(0)))
+        image_rgba[..., 3] = np.where(data_masked.mask, 0.0, 0.8)
+        legend_html = create_legend("NDWI (Surface Water)", [("Water", "#053061"), ("Wet", "#d1e5f0"), ("Dry", "#67001f")])
+        m.get_root().html.add_child(folium.Element(legend_html))
+
     # Save to Temp PNG for Overlay
-    import tempfile
     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmpfile:
         img_path = tmpfile.name
     

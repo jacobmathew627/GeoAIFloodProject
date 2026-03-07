@@ -3,6 +3,4 @@ __pycache__/
 .env
 *.tif
 *.pth
-processed/
-outputs/
 .ipynb_checkpoints/

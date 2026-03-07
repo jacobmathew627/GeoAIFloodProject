@@ -7,7 +7,7 @@ class WeightedFocalLoss(nn.Module):
     Focal Loss for handling class imbalance
     Focuses on hard examples and down-weights easy examples
     """
-    def __init__(self, alpha=0.75, gamma=2.0, reduction='mean'):
+    def __init__(self, alpha=0.85, gamma=2.0, reduction='mean'):
         super(WeightedFocalLoss, self).__init__()
         self.alpha = alpha  # Weight for positive class (flood pixels)
         self.gamma = gamma  # Focusing parameter

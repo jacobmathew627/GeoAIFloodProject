@@ -13,81 +13,66 @@ def load_real_flood_data():
     """
     print("Loading data with 2018 REAL flood observations...")
     
-    # Input features
-    dem_path = os.path.join("processed", "DEM_aligned.tif")
-    slope_path = os.path.join("processed", "Slope_aligned.tif")
-    flow_path = os.path.join("processed", "Flow_aligned.tif")
-    lulc_path = os.path.join("processed", "LULC_aligned.tif")
+    # Input features - 10 Channels
+    feature_paths = {
+        "dem": os.path.join("processed", "DEM_aligned.tif"),
+        "slope": os.path.join("processed", "Slope_aligned.tif"),
+        "flow": os.path.join("processed", "Flow_aligned.tif"),
+        "lulc": os.path.join("processed", "LULC_aligned.tif"),
+        "sar_vv": os.path.join("processed", "SAR_VV_aligned.tif"),
+        "sar_vh": os.path.join("processed", "SAR_VH_aligned.tif"),
+        "spi": os.path.join("processed", "SPI_aligned.tif"),
+        "twi": os.path.join("processed", "TWI_aligned.tif"),
+        "hand": os.path.join("processed", "HAND_aligned.tif"),
+        "builtup": os.path.join("processed", "BuiltupDensity_aligned.tif")
+    }
     
     # REAL flood label (2018 event)
     label_path = "flood_mask_2018_ekm.tif"
     
-    # Determine downsampling factor to keep memory under control
-    # Target: max 2000x2000 pixels
+    # Determine downsampling factor
     MAX_DIM = 2000
     
-    with rasterio.open(dem_path) as src:
+    with rasterio.open(feature_paths["dem"]) as src:
         orig_height, orig_width = src.height, src.width
         scale_factor = MAX_DIM / max(orig_height, orig_width)
-        
-        if scale_factor < 1:
-            new_height = int(orig_height * scale_factor)
-            new_width = int(orig_width * scale_factor)
-            print(f"Downsampling from {orig_height}x{orig_width} to {new_height}x{new_width}")
-        else:
-            new_height, new_width = orig_height, orig_width
-            print(f"Using original size: {orig_height}x{orig_width}")
-        
-        dem = src.read(1, out_shape=(new_height, new_width), 
-                      resampling=rasterio.enums.Resampling.bilinear).astype(np.float32)
-        profile = src.profile
+        new_height, new_width = (int(orig_height * scale_factor), int(orig_width * scale_factor)) if scale_factor < 1 else (orig_height, orig_width)
         target_shape = (new_height, new_width)
-        
-    with rasterio.open(slope_path) as src:
-        slope = src.read(1, out_shape=target_shape,
-                        resampling=rasterio.enums.Resampling.bilinear).astype(np.float32)
-        
-    with rasterio.open(flow_path) as src:
-        flow = src.read(1, out_shape=target_shape,
-                       resampling=rasterio.enums.Resampling.bilinear).astype(np.float32)
-        
-    with rasterio.open(lulc_path) as src:
-        lulc = src.read(1, out_shape=target_shape,
-                       resampling=rasterio.enums.Resampling.nearest).astype(np.float32)
-    
-    # Load REAL flood mask and resample to match input dimensions
+        profile = src.profile
+        print(f"Loading data at {new_height}x{new_width}...")
+
+    features = []
+    for name, path in feature_paths.items():
+        if os.path.exists(path):
+            with rasterio.open(path) as src:
+                data = src.read(1, out_shape=target_shape, 
+                                resampling=rasterio.enums.Resampling.bilinear if name != "lulc" else rasterio.enums.Resampling.nearest).astype(np.float32)
+                features.append(data)
+        else:
+            print(f"Warning: {name} not found at {path}. Using zeros.")
+            features.append(np.zeros(target_shape, dtype=np.float32))
+
+    # Load REAL flood mask
     with rasterio.open(label_path) as src:
-        label = src.read(1, out_shape=target_shape,
-                        resampling=rasterio.enums.Resampling.nearest).astype(np.float32)
-        label_profile = src.profile
-    
-    print(f"Final shape: {dem.shape}")
-    print(f"Flood pixels: {(label > 0).sum():,} ({(label > 0).sum() / label.size * 100:.2f}%)")
+        label = src.read(1, out_shape=target_shape, resampling=rasterio.enums.Resampling.nearest).astype(np.float32)
     
     # Stack inputs (C, H, W)
-    stack = np.stack([dem, slope, flow, lulc], axis=0)
-    print(f"Stack memory: {stack.nbytes / (1024**2):.1f} MB")
+    stack = np.stack(features, axis=0)
+    print(f"Stacked {stack.shape[0]} features. Memory: {stack.nbytes / (1024**2):.1f} MB")
     
     # Normalize inputs
     for i in range(stack.shape[0]):
         channel = stack[i]
         valid_mask = (channel != -9999) & (channel != 0) & (~np.isnan(channel))
         if valid_mask.sum() > 0:
-            mean = channel[valid_mask].mean()
-            std = channel[valid_mask].std()
-            stack[i] = np.where(valid_mask, (channel - mean) / (std + 1e-6), 0)
+            stack[i] = np.where(valid_mask, (channel - channel[valid_mask].mean()) / (channel[valid_mask].std() + 1e-6), 0)
     
-    # Normalize label to [0, 1]
-    label = np.clip(label, 0, 1)
-    
-    # Ensure binary: convert any non-zero to 1
-    label = (label > 0).astype(np.float32)
-    
-    print(f"Label range: [{label.min():.2f}, {label.max():.2f}]")
+    # Ensure binary label
+    label = (np.clip(label, 0, 1) > 0).astype(np.float32)
     
     return stack, label, profile
 
-def extract_balanced_patches_enhanced(stack, label, patch_size=32, num_patches=10000, 
+def extract_balanced_patches_enhanced(stack, label, patch_size=128, num_patches=5000, 
                                      flood_ratio=0.5, augment=True):
     """
     Enhanced patch extraction with:

@@ -35,8 +35,8 @@ def train_quick():
     stack, label, profile = load_real_flood_data()
     X_numpy, y_numpy = extract_balanced_patches_enhanced(
         stack, label, 
-        patch_size=32, 
-        num_patches=5000,  # Fewer patches for speed
+        patch_size=64, 
+        num_patches=4000, 
         flood_ratio=0.5
     )
     
