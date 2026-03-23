@@ -1,0 +1,19 @@
+[server]
+maxUploadSize = 500
+enableCORS = false
+enableXsrfProtection = true
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#e84855"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#1a2232"
+textColor = "#e0e0e0"
+font = "sans serif"
+
+[runner]
+# Cache large rasters aggressively to avoid re-loading on every interaction
+fastReruns = true
