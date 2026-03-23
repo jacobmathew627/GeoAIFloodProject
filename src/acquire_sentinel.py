@@ -33,8 +33,7 @@ def download_scenes(results, username, password):
     """
     Download scenes using NASA Earthdata credentials
     """
-    if not os.path.exists(SAR_DIR):
-        os.makedirs(SAR_DIR)
+    os.makedirs(SAR_DIR, exist_ok=True)  # BUG FIX: exist_ok avoids FileExistsError race condition
         
     print(f"Downloading {len(results)} scenes to {SAR_DIR}...")
     session = asf.ASFSession().auth_with_creds(username, password)

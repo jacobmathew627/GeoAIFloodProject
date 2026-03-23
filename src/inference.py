@@ -35,8 +35,8 @@ def get_normalization_stats():
         with rasterio.open(path) as src:
             arr = src.read(1)
             arr = np.nan_to_num(arr, nan=0.0)
-            stats[key] = (np.min(arr), np.max(arr))
-            stats[key] = {'min': np.min(arr), 'max': np.max(arr)}
+            # BUG FIX: was also assigning a tuple (line 38) before the dict (line 39) — dead code removed
+            stats[key] = {'min': float(np.min(arr)), 'max': float(np.max(arr))}
     return stats
 
 def normalize(arr, mn, mx):
@@ -62,9 +62,13 @@ def predict_flood_susceptibility(rainfall_mm=100, mode="standard"):
     model.eval()
     stats = get_normalization_stats()
 
-    # Pre-allocate stack to save RAM
-    dem_src = rasterio.open(os.path.join(PROCESSED_DIR, "DEM_aligned.tif"))
-    H, W = dem_src.shape
+    # BUG FIX: dem_src was opened without context manager -> file handle leak
+    # Extract metadata once inside a context manager, then close the handle
+    dem_path = os.path.join(PROCESSED_DIR, "DEM_aligned.tif")
+    with rasterio.open(dem_path) as dem_src:
+        H, W = dem_src.shape
+        dem_crs = dem_src.crs
+        dem_transform = dem_src.transform
     stack = np.zeros((n_channels, H, W), dtype=np.float32)
     
     # helper for in-place norm
@@ -123,13 +127,13 @@ def predict_flood_susceptibility(rainfall_mm=100, mode="standard"):
     
     with rasterio.open(
         output_path, 'w', driver='GTiff', height=H, width=W, count=1,
-        dtype=output.dtype, crs=dem_src.crs, transform=dem_src.transform, nodata=-9999
+        dtype=output.dtype, crs=dem_crs, transform=dem_transform, nodata=-9999
     ) as dst:
         dst.write(output, 1)
         
     print(f"Saved: {output_path}")
     del output, stack
-    dem_src.close()
+    # BUG FIX: dem_src.close() removed - handle is now properly closed by context manager above
     import gc; gc.collect()
     return output_path
 
