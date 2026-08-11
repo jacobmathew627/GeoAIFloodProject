@@ -96,6 +96,74 @@ def max_accumulation(daily: np.ndarray, window: int):
     return float(sums[i]), i
 
 
+# ──────────────────────────────────────────────
+# IMD gauge-based gridded rainfall (authoritative)
+# ──────────────────────────────────────────────
+def fetch_imd_daily(year: int, cache_dir: Optional[str] = None):
+    """
+    District-mean daily rainfall from the IMD 0.25 deg gridded product.
+
+    This is the official Indian gauge-based analysis and is the reference this
+    project uses. ERA5 is retained only as a cross-check: measured against IMD
+    it under-reads the 3-day maximum by 1.34x in 2018, 2.09x in 2019 and 1.49x
+    in 2021 -- a reanalysis smooths orographic extremes, and the Western Ghats
+    flank is exactly where that hurts.
+
+    Needs the `imdlib` package and network access.
+    """
+    import tempfile
+
+    import imdlib as imd
+
+    cache_dir = cache_dir or tempfile.mkdtemp()
+    data = imd.get_data("rain", year, year, fn_format="yearwise", file_dir=cache_dir)
+    ds = data.get_xarray().sel(
+        lat=slice(DISTRICT_BOX["lat"][0], DISTRICT_BOX["lat"][1]),
+        lon=slice(DISTRICT_BOX["lon"][0], DISTRICT_BOX["lon"][1]),
+    )
+    values = ds["rain"].values.astype(float)
+    # IMD encodes missing data as a negative value, not NaN.
+    values = np.where(values < 0, np.nan, values)
+    daily = np.nanmean(values, axis=(1, 2))
+    times = [str(t)[:10] for t in ds["time"].values]
+    return times, daily
+
+
+def analyse_imd(event: str = "2018") -> Dict:
+    """Reference-event statistics from IMD gridded rainfall."""
+    if event not in EVENTS:
+        raise ValueError(f"Unknown event {event!r}. Known: {sorted(EVENTS)}")
+
+    start, end = EVENTS[event]
+    times, daily = fetch_imd_daily(int(event))
+
+    keep = [i for i, t in enumerate(times) if start <= t <= end]
+    sub = daily[keep]
+    sub_times = [times[i] for i in keep]
+
+    windows = {}
+    for w in (1, 2, 3, 5, 7):
+        total, i = max_accumulation(sub, w)
+        windows[f"max_{w}day_mm"] = round(total, 1)
+        windows[f"max_{w}day_window"] = (
+            f"{sub_times[i]}..{sub_times[i + w - 1]}" if i is not None else None
+        )
+
+    peak = int(np.nanargmax(sub))
+    return {
+        "event": event,
+        "source": "IMD 0.25 deg gauge-based gridded rainfall (imdlib)",
+        "bbox": DISTRICT_BOX,
+        "period": [start, end],
+        "wettest_day": sub_times[peak],
+        "wettest_day_district_mean_mm": round(float(sub[peak]), 1),
+        "month_total_mm": round(float(np.nansum(sub)), 1),
+        "storm_window_days": STORM_WINDOW_DAYS,
+        "reference_event_mm": windows[f"max_{STORM_WINDOW_DAYS}day_mm"],
+        **windows,
+    }
+
+
 def analyse(event: str = "2018", n_grid: int = 3) -> Dict:
     if event not in EVENTS:
         raise ValueError(f"Unknown event {event!r}. Known: {sorted(EVENTS)}")
@@ -136,6 +204,10 @@ def main() -> None:  # pragma: no cover
     parser.add_argument("--event", default="2018", choices=sorted(EVENTS))
     parser.add_argument("--grid", type=int, default=3, help="Sampling grid side")
     parser.add_argument("--all", action="store_true", help="Report every known event")
+    parser.add_argument(
+        "--source", default="imd", choices=["imd", "era5"],
+        help="imd = official gauge analysis (default); era5 = reanalysis cross-check",
+    )
     args = parser.parse_args()
 
     setup_logging(logging.INFO)
@@ -143,14 +215,27 @@ def main() -> None:  # pragma: no cover
     events = sorted(EVENTS) if args.all else [args.event]
     results = {}
     for event in events:
-        r = analyse(event, args.grid)
+        if args.source == "imd":
+            r = analyse_imd(event)
+            try:
+                era5 = analyse(event, args.grid)
+                r["era5_cross_check"] = {
+                    "max_3day_mm": era5["max_3day_mm"],
+                    "ratio_imd_over_era5": round(
+                        r["max_3day_mm"] / max(era5["max_3day_mm"], 1e-6), 2
+                    ),
+                }
+            except Exception as exc:  # pragma: no cover - network path
+                LOGGER.warning("ERA5 cross-check unavailable: %s", exc)
+        else:
+            r = analyse(event, args.grid)
         results[event] = r
         LOGGER.info("=" * 62)
-        LOGGER.info("%s  (%d ERA5 points over the district)", event, r["n_grid_points"])
+        LOGGER.info("%s  -- %s", event, r["source"])
         LOGGER.info("=" * 62)
         LOGGER.info(
-            "  wettest day   %s  %.1f mm district mean (point max %.1f)",
-            r["wettest_day"], r["wettest_day_district_mean_mm"], r["wettest_day_point_max_mm"],
+            "  wettest day   %s  %.1f mm district mean",
+            r["wettest_day"], r["wettest_day_district_mean_mm"],
         )
         for w in (1, 2, 3, 5, 7):
             LOGGER.info(
@@ -158,6 +243,12 @@ def main() -> None:  # pragma: no cover
                 w, r[f"max_{w}day_mm"], r[f"max_{w}day_window"],
             )
         LOGGER.info("  month total   %6.1f mm", r["month_total_mm"])
+        if "era5_cross_check" in r:
+            LOGGER.info(
+                "  ERA5 cross-check: %.1f mm 3-day -> IMD is %.2fx higher",
+                r["era5_cross_check"]["max_3day_mm"],
+                r["era5_cross_check"]["ratio_imd_over_era5"],
+            )
         LOGGER.info(
             "  -> reference depth (%d-day storm, pairs with AMC III): %.1f mm",
             STORM_WINDOW_DAYS, r["reference_event_mm"],

@@ -9,6 +9,7 @@ pyproj==3.7.1
 # Numerics
 numpy==1.26.4
 scipy==1.15.3
+imdlib==0.1.19
 pandas==2.3.3
 
 # Model (susceptibility.py needs both; joblib is the persistence format)

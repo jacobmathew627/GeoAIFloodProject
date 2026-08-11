@@ -80,11 +80,19 @@ class TestMaxAccumulation:
 class TestConfigConsistency:
     def test_reference_matches_the_derived_2018_depth(self):
         """
-        332 mm is the ERA5 3-day maximum for August 2018 (331.6, 14-16 Aug).
-        If this drifts, either the constant or the derivation changed and the
-        two must be reconciled.
+        443 mm is the IMD gauge-based 3-day maximum for August 2018 (443.2,
+        15-17 Aug). If this drifts, either the constant or the derivation
+        changed and the two must be reconciled.
         """
-        assert RAINFALL.reference_event_mm == pytest.approx(332.0, abs=1.0)
+        assert RAINFALL.reference_event_mm == pytest.approx(443.0, abs=1.0)
+
+    def test_reference_exceeds_the_era5_estimate(self):
+        """
+        Regression: the reference was briefly taken from ERA5 (331.6 mm).
+        ERA5 smooths orographic extremes and under-reads the gauge analysis by
+        1.34x for this event, so the authoritative figure must be higher.
+        """
+        assert RAINFALL.reference_event_mm > 331.6
 
     def test_reference_is_a_scenario(self):
         assert RAINFALL.reference_event_mm in RAINFALL.scenarios
