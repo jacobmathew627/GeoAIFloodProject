@@ -58,3 +58,6 @@ outputs/flood_hazard_*.tif
 
 # Live model cache (regenerable: python src/live_model.py --build)
 models/live_model.npz
+
+# Upstream DEM mosaic (regenerable: python src/upstream_dem.py --build)
+GeoAI_New/Upstream_DEM.tif

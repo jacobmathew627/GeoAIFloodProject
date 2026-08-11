@@ -71,6 +71,58 @@ is kept and tested because it is correct; the DEM is what cannot support it.
 Street-scale ponding needs a LiDAR DEM, ideally 1 m with sub-decimetre vertical
 accuracy.
 
+## The biggest open gap: water entering from upstream
+
+The DEM is clipped to the district, and water is not. Measured on the shipped
+flow network, **the largest catchment the model can resolve is 248 km²**.
+For scale:
+
+| Basin draining into Ernakulam | Area |
+|---|---|
+| Periyar | ~5,398 km² |
+| Chalakudy | ~1,704 km² |
+| Muvattupuzha | ~1,554 km² |
+
+Every river enters the district across a nodata edge and arrives carrying
+nothing. The August 2018 flood was driven largely by Periyar discharge and
+reservoir releases from a catchment more than twenty times bigger than
+anything the model can see.
+
+What *is* routed, and what is not:
+
+| Component | Routed? |
+|---|---|
+| `upstream_cn` feature | Yes — catchment-average curve number |
+| Waterlogging index | Yes — `Σ_k Q_k(P)·N_k(x)` |
+| **Flood probability's rainfall response** | **No — pointwise** |
+
+So the *pattern* knows about flow, because HAND, TWI, flow accumulation and
+river distance encode convergence. The *rainfall response* does not: a pixel's
+forcing is the rain that fell on it, not what its catchment delivers. The
+learned susceptibility absorbs the 2018 pattern, which is why the maps look
+plausible, but nothing in the system responds to rain falling in the Western
+Ghats.
+
+### Attempted fix, and where it stands
+
+[src/upstream_dem.py](src/upstream_dem.py) builds a DEM over the full
+contributing area from open terrain tiles — **25,085 km² against the district
+DEM's 2,427 km²**, verified against known elevations (Kochi 4 m, Munnar
+1,455 m, Anamudi 2,465 m). That part works.
+
+Routing it does not, and is **not wired into the model**. Probed at points
+with published catchment areas the extended network returns 0 km² for the
+Periyar at Aluva, 2 km² at Neriamangalam and 1 km² for the Chalakudy — its
+largest accumulation sits on the grid edge rather than on any channel. The
+cause is depression conditioning: a plain priority-flood is fine over the
+2,400 km² district but across 25,000 km² of Western Ghats it creates flats up
+to 124 m deep, and flow disperses instead of concentrating.
+
+Finishing it needs breaching rather than pure filling, plus flat resolution
+that imposes a gradient toward the outlet — WhiteboxTools
+(`BreachDepressionsLeastCost`, `D8FlowAccumulation`) or RichDEM do this
+correctly. Hand-rolling it at this scale is the wrong use of effort.
+
 ## Read this first: what the model does and does not predict
 
 **It does not predict urban waterlogging.** It predicts the extent of
