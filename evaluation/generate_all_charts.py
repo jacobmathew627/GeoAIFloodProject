@@ -1,15 +1,45 @@
 """
-Comprehensive Evaluation Report Generator
-GeoAI Flood Susceptibility - Attention U-Net
-Generates: ROC curves, Model Comparison, Training Curves, Confusion Matrix, Literature Table
+DEPRECATED -- DO NOT RUN. Superseded by evaluation/generate_figures.py.
+
+This script does not plot measured results. Specifically:
+
+  * `synthetic_roc(auc, seed)` below *generates* a ROC curve shaped to hit a
+    target AUC. The curves in fig2_roc_curves.png were drawn by that function,
+    not computed from any model's predictions.
+  * The confusion matrix in fig3 is built from the comment
+    "Simulate realistic confusion matrix values from precision=0.712,
+    recall=0.632" -- it is back-derived from the numbers it appears to
+    demonstrate.
+  * The baseline rows (Logistic Regression, SVM, Random Forest, 3-Layer CNN,
+    Standard U-Net) are hardcoded literals. No run in this repository produced
+    them.
+
+`paper_metrics.json`, which this script partly reads, is also internally
+inconsistent: it reports the Attention U-Net at F1 = 0.670 while its own
+`training_history` shows validation F1 peaking at 0.008, and it lists
+Logistic Regression and SVM with AUC 0.798/0.884 but precision, recall, F1 and
+IoU all exactly 0.0. The channel count is given as 12 in the literature table,
+7 in the ablation and 13 in src/config.py.
+
+Publishing any of these figures would misrepresent the system. The replacement
+computes every panel from a file on disk:
+
+    python src/benchmark_models.py          # real baselines, same folds
+    python evaluation/generate_figures.py   # figures from measured numbers
 """
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import matplotlib.gridspec as gridspec
-from matplotlib.colors import LinearSegmentedColormap
 import json
 import os
+
+import matplotlib.gridspec as gridspec
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import LinearSegmentedColormap
+
+raise SystemExit(
+    __doc__.strip()
+    + "\n\nRefusing to run: this would regenerate fabricated result figures."
+)
 
 # Derived from this file's location rather than hardcoded to one machine.
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))

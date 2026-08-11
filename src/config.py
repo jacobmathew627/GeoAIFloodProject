@@ -100,7 +100,7 @@ class GeoConfig:
 @dataclass(frozen=True)
 class RainfallConfig:
     """Rainfall scenario configuration."""
-    scenarios: tuple = (50, 100, 150, 200, 250, 300, 400)
+    scenarios: tuple = (50, 100, 150, 200, 250, 300, 332, 400)
     max_slider: int = 500
     live_weather_url: str = "https://api.open-meteo.com/v1/forecast"
     weather_params: dict = field(default_factory=lambda: {
@@ -110,14 +110,35 @@ class RainfallConfig:
         "forecast_days": 2
     })
 
-    # Reference event used to calibrate the hazard model. The flood inventory
-    # is the Sentinel-1 water extent from the August 2018 Kerala flood, whose
-    # severe spell ran 14-19 Aug 2018. ASSUMPTION: 400 mm represents the
-    # 3-day (15-17 Aug) catchment-average depth over Ernakulam. The nearest
-    # documented station figure is Kochi CIAL at 171.9 mm in 24 h on 15 Aug
-    # 2018 (an all-time record for that station). Change this and the whole
-    # rainfall response rescales -- it is the single anchor of the model.
-    reference_event_mm: float = 400.0
+    # Reference event: the storm depth the observed 2018 flood extent is taken
+    # to represent. The hazard model reduces exactly to the fitted
+    # susceptibility here, so this constant is the single anchor of the whole
+    # rainfall response.
+    #
+    # DERIVED, not assumed. ERA5 reanalysis sampled on a 3x3 grid over the
+    # master-grid footprint (src/reference_rainfall.py, cached in
+    # models/reference_rainfall.json) gives, for August 2018:
+    #
+    #     max 1-day  157.9 mm   (15 Aug, point max 243.4)
+    #     max 2-day  255.9 mm   (15-16 Aug)
+    #     max 3-day  331.6 mm   (14-16 Aug)   <- used
+    #     max 5-day  420.1 mm   (14-18 Aug)
+    #     month      786.8 mm
+    #
+    # The 3-day window is chosen deliberately: HYDRO.amc is III, which already
+    # encodes a wet antecedent 5 days, so the storm depth must be the burst
+    # itself or antecedent wetness is counted twice.
+    #
+    # The previous value, 400 mm, was a guess that happened to land near the
+    # 5-day total. Correcting it to 332 does not disturb the calibration --
+    # hazard equals susceptibility at the reference depth whatever that depth
+    # is -- but it does make every other scenario correspondingly more severe,
+    # because the 2018 extent is now attributed to a smaller storm.
+    #
+    # Caveat: ERA5 under-resolves orographic extremes, and no rainfall product
+    # captures the Periyar reservoir releases that contributed to the 2018
+    # inundation. Treat this as a proxy for total forcing, not a measured storm.
+    reference_event_mm: float = 332.0
 
 
 @dataclass(frozen=True)

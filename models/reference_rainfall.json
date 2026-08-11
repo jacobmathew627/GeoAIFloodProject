@@ -1,0 +1,107 @@
+{
+  "2018": {
+    "event": "2018",
+    "source": "ERA5 reanalysis via Open-Meteo archive API",
+    "n_grid_points": 9,
+    "bbox": {
+      "lat": [
+        9.79,
+        10.3
+      ],
+      "lon": [
+        76.17,
+        76.84
+      ]
+    },
+    "period": [
+      "2018-08-01",
+      "2018-08-31"
+    ],
+    "wettest_day": "2018-08-15",
+    "wettest_day_district_mean_mm": 157.9,
+    "wettest_day_point_max_mm": 243.4,
+    "month_total_mm": 786.8,
+    "storm_window_days": 3,
+    "reference_event_mm": 331.6,
+    "max_1day_mm": 157.9,
+    "max_1day_window": "2018-08-15..2018-08-15",
+    "max_2day_mm": 255.9,
+    "max_2day_window": "2018-08-15..2018-08-16",
+    "max_3day_mm": 331.6,
+    "max_3day_window": "2018-08-14..2018-08-16",
+    "max_5day_mm": 420.1,
+    "max_5day_window": "2018-08-14..2018-08-18",
+    "max_7day_mm": 486.6,
+    "max_7day_window": "2018-08-12..2018-08-18"
+  },
+  "2019": {
+    "event": "2019",
+    "source": "ERA5 reanalysis via Open-Meteo archive API",
+    "n_grid_points": 9,
+    "bbox": {
+      "lat": [
+        9.79,
+        10.3
+      ],
+      "lon": [
+        76.17,
+        76.84
+      ]
+    },
+    "period": [
+      "2019-08-01",
+      "2019-08-31"
+    ],
+    "wettest_day": "2019-08-08",
+    "wettest_day_district_mean_mm": 76.9,
+    "wettest_day_point_max_mm": 121.9,
+    "month_total_mm": 942.9,
+    "storm_window_days": 3,
+    "reference_event_mm": 197.4,
+    "max_1day_mm": 76.9,
+    "max_1day_window": "2019-08-08..2019-08-08",
+    "max_2day_mm": 141.2,
+    "max_2day_window": "2019-08-13..2019-08-14",
+    "max_3day_mm": 197.4,
+    "max_3day_window": "2019-08-07..2019-08-09",
+    "max_5day_mm": 296.3,
+    "max_5day_window": "2019-08-06..2019-08-10",
+    "max_7day_mm": 370.5,
+    "max_7day_window": "2019-08-08..2019-08-14"
+  },
+  "2021": {
+    "event": "2021",
+    "source": "ERA5 reanalysis via Open-Meteo archive API",
+    "n_grid_points": 9,
+    "bbox": {
+      "lat": [
+        9.79,
+        10.3
+      ],
+      "lon": [
+        76.17,
+        76.84
+      ]
+    },
+    "period": [
+      "2021-10-01",
+      "2021-10-31"
+    ],
+    "wettest_day": "2021-10-12",
+    "wettest_day_district_mean_mm": 58.5,
+    "wettest_day_point_max_mm": 74.4,
+    "month_total_mm": 663.5,
+    "storm_window_days": 3,
+    "reference_event_mm": 116.9,
+    "max_1day_mm": 58.5,
+    "max_1day_window": "2021-10-12..2021-10-12",
+    "max_2day_mm": 98.1,
+    "max_2day_window": "2021-10-11..2021-10-12",
+    "max_3day_mm": 116.9,
+    "max_3day_window": "2021-10-10..2021-10-12",
+    "max_5day_mm": 160.3,
+    "max_5day_window": "2021-10-01..2021-10-05",
+    "max_7day_mm": 218.0,
+    "max_7day_window": "2021-10-11..2021-10-17"
+  }
+}

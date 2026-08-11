@@ -365,13 +365,25 @@ what identifies it as built-up.
 These are modelling choices, not measurements. Each is a single constant in
 `src/config.py`.
 
-- **Reference event = 400 mm** (`RAINFALL.reference_event_mm`). The Sentinel-1
-  inventory captures the August 2018 Kerala flood, whose severe spell ran
-  14–19 August. 400 mm is taken as the 3-day (15–17 Aug) catchment-average
-  depth over Ernakulam. The nearest documented station figure is Kochi CIAL at
-  171.9 mm in 24 h on 15 August 2018, an all-time record for that station.
-  This constant anchors the entire rainfall response — changing it rescales
-  every hazard map.
+- **Reference event = 332 mm** (`RAINFALL.reference_event_mm`) — now *derived*,
+  not assumed. ERA5 reanalysis on a 3×3 grid over the mapped district
+  ([src/reference_rainfall.py](src/reference_rainfall.py)) gives, for August
+  2018: max 1-day 157.9 mm (15 Aug), 2-day 255.9, **3-day 331.6 (14–16 Aug)**,
+  5-day 420.1, month 786.8. The 3-day window is chosen because `HYDRO.amc` is
+  III, which already encodes a wet antecedent 5 days — using a 5-day storm
+  total would count antecedent wetness twice.
+
+  The previous value, 400 mm, was a guess that happened to land near the 5-day
+  total. Correcting it does not disturb the calibration (hazard equals
+  susceptibility at the reference depth, whatever that depth is) but it makes
+  every other scenario more severe, because the 2018 extent is now attributed
+  to a smaller storm: a 400 mm scenario went from 30 km² to 40 km² of expected
+  flooding, and 150 mm from 6 km² to 8 km². The system was previously
+  understating hazard at every rainfall depth.
+
+  Caveat: ERA5 under-resolves orographic extremes, and no rainfall product
+  captures the Periyar reservoir releases that contributed to the 2018
+  inundation. Treat it as a proxy for total forcing, not a measured storm.
 - **Hydrologic soil group C** for the whole district. Kerala's uplands are
   laterite (HSG C) and the coastal strip is alluvium (HSG B); C is the
   conservative single-group choice. A real HSG raster would improve this.
@@ -394,9 +406,15 @@ These are modelling choices, not measurements. Each is a single constant in
   prior offset is fitted to reproduce the same event the model was trained on,
   so "expected area equals observed area" is a consistency check, not
   independent validation.
-- **`urban_mask` contributes nothing** (permutation importance −0.001). It is
-  fully redundant with `urban_dist` and `curve_number` and should be dropped
-  from `SUSCEPTIBILITY_FEATURES` at the next retrain.
+- **`urban_mask` contributes nothing** (permutation importance 0.000). It is
+  redundant with `urban_dist` and `curve_number`. Deliberately *not* removed
+  yet: dropping a feature forces a retrain, which forces the risk thresholds to
+  be re-derived (they are properties of the fitted probabilities, not
+  constants), which forces the full-grid prediction, hazard and conformal
+  rasters to be regenerated. That is ~45 minutes of compute for no measurable
+  change in skill, and it would leave figures built from two different feature
+  sets. Fold it into the next retrain, which a second flood inventory will
+  require anyway.
 - **Presence-only inventory.** SAR observes water, not "dry". Absences are
   pseudo-absences: buffered 5 px away from observed flooding and stratified
   across elevation deciles matched to the presence distribution. This is the
@@ -429,6 +447,47 @@ GET /api/risk_stats/{mm}   risk-class breakdown with real areas in km2
 GET /api/runoff            SCS-CN runoff for a rainfall depth and curve number
 GET /api/places            known place coordinates
 ```
+
+## Results figures
+
+```bash
+python src/benchmark_models.py          # real baselines, identical folds
+python evaluation/generate_figures.py   # figures from measured numbers
+```
+
+| Figure | Shows |
+|---|---|
+| `fig1_roc_spatial_cv.png` | ROC curves computed from out-of-fold predictions |
+| `fig2_cv_inflation.png` | Spatial-block vs random k-fold AUC, per model |
+| `fig3_reliability.png` | Predicted vs observed frequency on a held-out split |
+| `fig4_threshold_derivation.png` | The PR curve the risk band edges were read off |
+| `fig5_conformal_coverage.png` | Marginal vs class-conditional coverage |
+| `fig6_graph_ablation.png` | The graph negative result, with the edges-off control |
+| `fig7_feature_importance.png` | Permutation importance |
+| `fig8_reference_rainfall.png` | ERA5 accumulations behind the reference depth |
+
+### Why the previous figures were replaced
+
+`evaluation/generate_all_charts.py` is deprecated and now refuses to run. It did
+not plot measured results:
+
+- `synthetic_roc(auc, seed)` **generated** a ROC curve shaped to hit a target
+  AUC. The curves in `fig2_roc_curves.png` came from that function, not from any
+  model's predictions.
+- The confusion matrix was built from the comment *"Simulate realistic confusion
+  matrix values from precision=0.712, recall=0.632"* — back-derived from the
+  numbers it appeared to demonstrate.
+- The baseline rows (Logistic Regression, SVM, Random Forest, 3-Layer CNN,
+  Standard U-Net) were hardcoded literals with no corresponding run.
+
+`paper_metrics.json` is also internally inconsistent: it reports the Attention
+U-Net at F1 = 0.670 while its own `training_history` shows validation F1 peaking
+at **0.008**, and lists Logistic Regression and SVM with AUC 0.798/0.884 but
+precision, recall, F1 and IoU all exactly 0.0. The channel count is 12 in the
+literature table, 7 in the ablation and 13 in `config.py`.
+
+The old `fig1`–`fig6` PNGs are left in place rather than deleted — that is a
+call for whoever owns the manuscript — but nothing regenerates them.
 
 ## Testing
 
