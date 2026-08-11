@@ -29,6 +29,7 @@ from visualization import (
     apply_colormap,
     compute_risk_stats,
     create_alert_message,
+    create_flood_visualization,
     create_legend_html,
     pixel_area_km2_from_transform,
     prob_to_png_b64,
@@ -196,6 +197,59 @@ class TestColormap:
         alpha = rgba[..., 3]
         assert (alpha[:14, :] == 0).all()      # solidly nodata
         assert (alpha[18:, :] == 200).all()    # solidly valid
+
+
+class TestNodataMasking:
+    """
+    Regression: the live model returns NaN for nodata while rasters read from
+    disk use -9999. The renderers masked only on the sentinel, and every NaN
+    comparison is False, so NaN cells went unmasked, were coloured black by the
+    colormap's "bad" value, and then painted at the layer's alpha -- turning
+    the whole map into a flat grey rectangle with the risk zones underneath it.
+    """
+
+    def test_masks_the_sentinel(self):
+        from visualization import mask_nodata
+
+        m = mask_nodata(np.array([[0.5, NODATA]], dtype=np.float32))
+        assert not m.mask[0, 0]
+        assert m.mask[0, 1]
+
+    def test_masks_nan(self):
+        from visualization import mask_nodata
+
+        m = mask_nodata(np.array([[0.5, np.nan]], dtype=np.float32))
+        assert not m.mask[0, 0]
+        assert m.mask[0, 1]
+
+    def test_masks_both_at_once(self):
+        from visualization import mask_nodata
+
+        m = mask_nodata(np.array([[0.5, np.nan, NODATA, 0.9]], dtype=np.float32))
+        assert list(m.mask[0]) == [False, True, True, False]
+
+    @pytest.mark.parametrize("bad", [np.nan, NODATA])
+    def test_flood_overlay_leaves_nodata_transparent(self, bad):
+        data = np.full((8, 8), 0.5, dtype=np.float32)
+        data[0, :] = bad
+        rgba, _ = create_flood_visualization(data, VIZ, RISK)
+        assert (rgba[0, :, 3] == 0).all(), "nodata must not be painted"
+        assert (rgba[1:, :, 3] > 0).all(), "valid data must be painted"
+
+    @pytest.mark.parametrize("bad", [np.nan, NODATA])
+    def test_pluvial_overlay_leaves_nodata_transparent(self, bad):
+        from visualization import create_pluvial_visualization
+
+        data = np.full((8, 8), 0.5, dtype=np.float32)
+        data[0, :] = bad
+        rgba, _ = create_pluvial_visualization(data)
+        assert (rgba[0, :, 3] == 0).all()
+        assert (rgba[1:, :, 3] > 0).all()
+
+    def test_all_nan_renders_fully_transparent(self):
+        data = np.full((4, 4), np.nan, dtype=np.float32)
+        rgba, _ = create_flood_visualization(data, VIZ, RISK)
+        assert (rgba[..., 3] == 0).all()
 
 
 class TestRiskStats:

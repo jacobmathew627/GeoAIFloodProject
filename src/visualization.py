@@ -52,6 +52,22 @@ FLOOD_COLORMAP_RGB: List[Tuple[float, Tuple[int, int, int]]] = [
 # ──────────────────────────────────────────────
 # Geometry helpers
 # ──────────────────────────────────────────────
+def mask_nodata(data: np.ndarray) -> np.ma.MaskedArray:
+    """
+    Mask nodata however it is expressed.
+
+    Rasters read from disk carry the -9999 sentinel; the live model returns
+    NaN. `np.ma.masked_less_equal` silently ignores NaN, because every NaN
+    comparison is False -- so masking on the sentinel alone left every NaN
+    cell unmasked, coloured black by the colormap's "bad" value, and then
+    painted at the layer's alpha. That is what turned the map into a flat grey
+    rectangle with the risk zones hidden underneath it.
+
+    Every renderer must go through here.
+    """
+    return np.ma.masked_invalid(np.ma.masked_less_equal(data, -9000))
+
+
 def pixel_area_km2_from_transform(transform: Any) -> Optional[float]:
     """
     Area of one pixel in km2, taken from an affine transform.
@@ -304,7 +320,7 @@ def create_flood_visualization(
     data: np.ndarray, viz, risk_cfg
 ) -> Tuple[np.ndarray, List[Tuple[str, str]]]:
     """RGBA overlay for a flood probability / hazard map."""
-    masked = np.ma.masked_less_equal(data, -9000)
+    masked = mask_nodata(data)
     norm = plt.Normalize(vmin=0.0, vmax=1.0)
     image_rgba = FLOOD_COLORMAP(norm(masked.filled(0.0)))
 
@@ -347,7 +363,7 @@ def create_static_visualization(
     data: np.ndarray, layer_type: str, viz
 ) -> Tuple[np.ndarray, List[Tuple[str, str]]]:
     """RGBA overlay for a static conditioning-factor layer."""
-    masked = np.ma.masked_less_equal(data, -9000)
+    masked = mask_nodata(data)
 
     if layer_type == "LULC":
         return _lulc_visualization(masked)
@@ -422,7 +438,7 @@ def create_conformal_visualization(
     the ambiguous and atypical classes are the honest output where the model
     cannot support a decision at the requested confidence.
     """
-    masked = np.ma.masked_less_equal(data, -9000)
+    masked = mask_nodata(data)
     hidden = np.ma.getmaskarray(masked)
     codes = np.round(masked.filled(-1)).astype(np.int32)
 
@@ -463,7 +479,7 @@ def create_pluvial_visualization(
     carries no percentages -- putting "%" on an unvalidated index would invite
     it to be read as a probability.
     """
-    masked = np.ma.masked_invalid(np.ma.masked_less_equal(data, -9000))
+    masked = mask_nodata(data)
     hidden = np.ma.getmaskarray(masked)
 
     norm = plt.Normalize(vmin=0.0, vmax=1.0)
