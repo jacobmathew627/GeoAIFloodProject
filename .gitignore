@@ -55,3 +55,6 @@ Thumbs.db
 outputs/susceptibility*.tif
 outputs/conformal_sets.tif
 outputs/flood_hazard_*.tif
+
+# Live model cache (regenerable: python src/live_model.py --build)
+models/live_model.npz

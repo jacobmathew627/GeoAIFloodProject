@@ -14,7 +14,8 @@ import streamlit as st
 LOGGER = logging.getLogger("geoai_flood")
 
 LAYER_CHOICES = [
-    "Flood Probability",
+    "Flood Probability (live)",
+    "Waterlogging Index (live)",
     "Conformal Confidence",
     "DEM",
     "Slope",
@@ -266,6 +267,91 @@ def render_advanced_analytics(
 # ──────────────────────────────────────────────
 # Place search and click readout
 # ──────────────────────────────────────────────
+def render_live_analytics(
+    grid, rainfall: float, st_data, data: np.ndarray, layer_type: str,
+    risk_cfg, transform,
+) -> None:
+    """
+    Point query and summary for the live layers.
+
+    Answers the operational question directly: at this rainfall, at this
+    place, what does the model say and what physical quantities produced it.
+    """
+    import live_model
+    from config import RAINFALL
+    from visualization import compute_risk_stats, pixel_area_km2_from_transform
+
+    st.markdown("---")
+
+    clicked = st_data.get("last_clicked") if st_data else None
+    left, right = st.columns([1, 1])
+
+    with left:
+        st.subheader("Point query")
+        if not clicked:
+            st.info("Click the map to evaluate a specific location.")
+        else:
+            result = live_model.query(grid, clicked["lat"], clicked["lng"], rainfall)
+            if result is None:
+                st.warning("Outside the mapped district.")
+            else:
+                st.markdown(
+                    f"**{result['lat']:.4f}, {result['lon']:.4f}** "
+                    f"— {result['land_cover'] or 'unclassified'}"
+                )
+                a, b = st.columns(2)
+                a.metric(
+                    "Inundation probability",
+                    f"{result['fluvial_probability']:.1%}",
+                    help="Calibrated. Riverine and backwater inundation.",
+                )
+                b.metric(
+                    "Waterlogging index",
+                    f"{result['pluvial_index']:.2f}",
+                    help="Unvalidated physics index, 0-1 relative ranking.",
+                )
+                st.caption(
+                    f"At {result['rainfall_mm']:.0f} mm on curve number "
+                    f"{result['curve_number']:.0f}, SCS-CN gives "
+                    f"**{result['runoff_mm']:.0f} mm of runoff** "
+                    f"({result['runoff_coefficient']:.0%} of the rainfall). "
+                    f"Rainfall-independent susceptibility here is "
+                    f"{result['susceptibility']:.1%}."
+                )
+
+    with right:
+        st.subheader("District summary")
+        valid = data[np.isfinite(data)]
+        if valid.size == 0:
+            st.warning("No valid data.")
+            return
+
+        px_km2 = pixel_area_km2_from_transform(transform)
+        if layer_type == "Flood Probability (live)":
+            stats = compute_risk_stats(
+                np.where(np.isfinite(data), data, -9999.0), risk_cfg, transform
+            )
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Expected flooded", f"{stats['expected_flooded_km2']:,.0f} km²")
+            c2.metric("Critical zone", f"{stats.get('critical_km2', 0):,.1f} km²")
+            c3.metric("Mean probability", f"{stats['mean_prob']:.2%}")
+            st.caption(
+                "Expected flooded area is the integral of the probability "
+                "surface — the quantity the model is calibrated against."
+            )
+        else:
+            high = float((valid >= 0.75).sum()) * (px_km2 or 0)
+            mod = float((valid >= 0.50).sum()) * (px_km2 or 0)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Very high pressure", f"{high:,.0f} km²")
+            c2.metric("High or above", f"{mod:,.0f} km²")
+            c3.metric("Mean index", f"{valid.mean():.2f}")
+            st.caption(
+                "Relative ranking anchored to the reference storm "
+                f"({RAINFALL.reference_event_mm:.0f} mm). Not a probability."
+            )
+
+
 def render_place_search(known_places: dict) -> None:
     """Sidebar place lookup."""
     st.sidebar.markdown("---")

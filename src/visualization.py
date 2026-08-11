@@ -442,6 +442,44 @@ def create_conformal_visualization(
     return image_rgba, legend_items
 
 
+#: Ramp for the waterlogging index. Deliberately a different hue family from
+#: the flood-probability ramp: the two layers mean different things and one is
+#: calibrated while the other is not, so they must not read as the same scale.
+PLUVIAL_COLORMAP = LinearSegmentedColormap.from_list(
+    "PluvialRamp",
+    [(0.00, "#f7f4f9"), (0.25, "#d0d1e6"), (0.50, "#a6bddb"),
+     (0.75, "#3690c0"), (1.00, "#034e7b")],
+)
+
+
+def create_pluvial_visualization(
+    data: np.ndarray,
+) -> Tuple[np.ndarray, List[Tuple[str, str]]]:
+    """
+    Render the rain-driven waterlogging index.
+
+    Unlike the flood probability, this is a *relative* 0-1 ranking anchored to
+    the reference storm, so the legend is labelled in relative terms and
+    carries no percentages -- putting "%" on an unvalidated index would invite
+    it to be read as a probability.
+    """
+    masked = np.ma.masked_invalid(np.ma.masked_less_equal(data, -9000))
+    hidden = np.ma.getmaskarray(masked)
+
+    norm = plt.Normalize(vmin=0.0, vmax=1.0)
+    image_rgba = PLUVIAL_COLORMAP(norm(masked.filled(0.0)))
+    image_rgba[..., 3] = np.where(hidden, 0.0, 0.7)
+
+    legend_items = [
+        ("Very high pressure", "#034e7b"),
+        ("High", "#3690c0"),
+        ("Moderate", "#a6bddb"),
+        ("Low", "#d0d1e6"),
+        ("Negligible", "#f7f4f9"),
+    ]
+    return image_rgba, legend_items
+
+
 def _lulc_visualization(masked) -> Tuple[np.ndarray, List[Tuple[str, str]]]:
     """Categorical rendering for the LULC layer."""
     from config import LULC_CLASS_NAMES

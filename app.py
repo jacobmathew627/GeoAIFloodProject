@@ -1,8 +1,9 @@
 """
-GeoAI Flood Risk Dashboard – Streamlit Frontend.
+GeoAI Flood Risk Dashboard - Streamlit frontend.
 
-Renders the rainfall-conditioned flood hazard maps produced by
-`src/predict.py`, plus the underlying conditioning factors.
+The two model layers are computed live: moving the rainfall slider re-evaluates
+the model at that depth (~60 ms) rather than interpolating between pre-rendered
+scenario rasters.
 """
 import atexit
 import logging
@@ -14,7 +15,6 @@ from pathlib import Path
 import numpy as np
 import streamlit as st
 
-# Add src to path before importing project modules
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from config import (  # noqa: E402
@@ -27,14 +27,9 @@ from config import (  # noqa: E402
     VIZ,
     setup_logging,
 )
-from data_loading import (  # noqa: E402
-    load_conformal_sets,
-    load_hazard_maps,
-    load_static_layer,
-)
-from hazard import blend_scenarios  # noqa: E402
+from data_loading import load_conformal_sets, load_static_layer  # noqa: E402
 from ui_components import (  # noqa: E402
-    render_advanced_analytics,
+    render_live_analytics,
     render_map_click_info,
     render_place_search,
     render_sidebar,
@@ -44,6 +39,7 @@ from visualization import (  # noqa: E402
     create_conformal_visualization,
     create_flood_visualization,
     create_legend_html,
+    create_pluvial_visualization,
     create_static_visualization,
 )
 
@@ -55,6 +51,18 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+LIVE_LAYERS = ("Flood Probability (live)", "Waterlogging Index (live)")
+
+
+# ──────────────────────────────────────────────
+# Model loading (cached across reruns)
+# ──────────────────────────────────────────────
+@st.cache_resource(show_spinner="Loading the model...")
+def get_live_grid():
+    import live_model
+
+    return live_model.load()
 
 
 # ──────────────────────────────────────────────
@@ -79,15 +87,14 @@ def _write_overlay_png(image_rgba: np.ndarray) -> str:
     """
     Write an RGBA float array to a PNG and return its path.
 
-    Streamlit re-runs this whole script on every widget interaction, so a
-    fresh NamedTemporaryFile per run would leave one file behind per slider
-    tick. The path is held in session state and overwritten in place, and
-    the interpreter cleans up whatever is left at exit.
+    Streamlit re-runs the script on every widget interaction, so a fresh
+    NamedTemporaryFile per run would leave one file behind per slider tick.
+    The path is held in session state and overwritten in place.
     """
     from PIL import Image
 
     path = st.session_state.get("_overlay_png_path")
-    if path is None or not os.path.exists(os.path.dirname(path) or "."):
+    if path is None:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             path = tmp.name
         st.session_state["_overlay_png_path"] = path
@@ -106,30 +113,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown(
-    """
-<div style='text-align: justify; padding: 10px; background-color: #f0f2f6;
-     border-left: 5px solid #4CAF50; margin-bottom: 20px;'>
-<i style='color: #4CAF50;'>
-"Our system integrates rainfall forecasting with geospatial terrain analysis
-and satellite-based flood detection to generate real-time and predictive
-urban waterlogging risk maps."
-</i>
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
-col1, col2 = st.columns([1, 1])
-with col1:
-    st.metric("Model Type", "Calibrated susceptibility x SCS-CN runoff")
-with col2:
-    st.metric("Region", "Ernakulam, Kerala, India")
-
 alert_placeholder = st.empty()
 
 # ──────────────────────────────────────────────
-# Sidebar controls
+# Sidebar
 # ──────────────────────────────────────────────
 controls = render_sidebar(RAINFALL, RISK, KNOWN_PLACES)
 layer_type = controls["layer_type"]
@@ -138,55 +125,66 @@ rainfall = controls["rainfall"]
 is_2018 = controls["is_2018"]
 
 if is_2018:
-    rainfall = 400
-    st.sidebar.error("SIMULATING 2018 EXTREME FLOOD EVENT (400mm+)")
+    rainfall = RAINFALL.reference_event_mm
+    st.sidebar.error(
+        f"Simulating the August 2018 event: {rainfall:.0f} mm "
+        "(ERA5 3-day maximum, 14-16 Aug)"
+    )
 
 # ──────────────────────────────────────────────
-# Data loading
+# Data
 # ──────────────────────────────────────────────
 data = None
 meta = None
-maps: dict = {}
+grid = None
 
-if layer_type == "Flood Probability":
-    maps, meta = load_hazard_maps(OUTPUT_DIR)
-    if not maps:
+if layer_type in LIVE_LAYERS:
+    try:
+        import live_model
+
+        grid = get_live_grid()
+        with st.spinner(f"Evaluating the model at {rainfall:.0f} mm..."):
+            if layer_type == "Flood Probability (live)":
+                data = live_model.fluvial_probability(grid, rainfall)
+            else:
+                data = live_model.pluvial_index(grid, rainfall)
+        meta = {
+            "bounds": grid.bounds, "crs": grid.crs,
+            "transform": grid.transform, "nodata": np.nan,
+        }
+    except FileNotFoundError as exc:
         st.error(
-            "No hazard maps found. Generate them first:\n\n"
+            f"{exc}\n\nBuild the live model first:\n\n"
             "```\npython align_data.py\n"
+            "python src/derive_features.py\n"
             "python src/susceptibility.py --train --predict\n"
-            "python src/hazard.py\n```"
+            "python src/live_model.py --build\n```"
         )
-    else:
-        data = blend_scenarios(maps, rainfall)
 elif layer_type == "Conformal Confidence":
     data, meta = load_conformal_sets(OUTPUT_DIR)
     if data is None:
         st.error(
-            "No conformal raster found. Generate it with:\n\n"
+            "No conformal raster. Generate it with:\n\n"
             "```\npython src/susceptibility.py --conformal\n```"
         )
     else:
         st.info(
-            "Prediction sets with a distribution-free coverage guarantee. This "
-            "layer is rainfall-independent: it describes where the model can "
-            "support a decision at 90% confidence, not how much it will rain."
+            "Prediction sets with a distribution-free coverage guarantee. "
+            "Rainfall-independent: it shows where the model can support a "
+            "decision at 90% confidence, not how much it will rain."
         )
 else:
     data, meta = load_static_layer(layer_type, GEOAI_NEW_DIR)
 
 # ──────────────────────────────────────────────
-# Visualisation
+# Map
 # ──────────────────────────────────────────────
 if data is not None and meta is not None:
     import folium
     from pyproj import Transformer
     from streamlit_folium import st_folium
 
-    bounds = meta["bounds"]
-    crs = meta["crs"]
-    transf = meta["transform"]
-    nodata = meta["nodata"]
+    bounds, crs, transf = meta["bounds"], meta["crs"], meta["transform"]
 
     transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
     min_lon, min_lat = transformer.transform(bounds.left, bounds.bottom)
@@ -198,12 +196,9 @@ if data is not None and meta is not None:
     folium.TileLayer("CartoDB dark_matter", name="Dark Map", control=True).add_to(m)
     folium.TileLayer("OpenStreetMap", name="Street Map", control=True).add_to(m)
 
-    if layer_type == "Flood Probability":
+    if layer_type == "Flood Probability (live)":
         image_rgba, legend_items = create_flood_visualization(data, VIZ, RISK)
-        m.get_root().html.add_child(
-            folium.Element(create_legend_html("Flood Risk Level", legend_items))
-        )
-
+        title = f"Inundation probability at {rainfall:.0f} mm"
         alert_msg = create_alert_message(data, rainfall, GEO, RISK, transf)
         if alert_msg:
             if "CRITICAL" in alert_msg:
@@ -212,35 +207,41 @@ if data is not None and meta is not None:
                 alert_placeholder.warning(alert_msg)
             else:
                 alert_placeholder.info(alert_msg)
+    elif layer_type == "Waterlogging Index (live)":
+        image_rgba, legend_items = create_pluvial_visualization(data)
+        title = f"Waterlogging pressure at {rainfall:.0f} mm"
+        alert_placeholder.warning(
+            "**Unvalidated layer.** Physics only: routed SCS-CN runoff over "
+            "local gradient. There are no urban waterlogging records for this "
+            "district, so this index has never been tested against the "
+            "phenomenon it names. Use it to rank locations, not as a probability. "
+            "The calibrated layer is *Flood Probability (live)*."
+        )
     elif layer_type == "Conformal Confidence":
         image_rgba, legend_items = create_conformal_visualization(data)
-        m.get_root().html.add_child(
-            folium.Element(create_legend_html("Prediction set (90%)", legend_items))
-        )
+        title = "Prediction set (90%)"
     else:
         image_rgba, legend_items = create_static_visualization(data, layer_type, VIZ)
-        m.get_root().html.add_child(
-            folium.Element(create_legend_html(layer_type, legend_items))
-        )
+        title = layer_type
 
+    m.get_root().html.add_child(folium.Element(create_legend_html(title, legend_items)))
     folium.raster_layers.ImageOverlay(
-        image=_write_overlay_png(image_rgba),
-        bounds=image_bounds,
-        opacity=0.7,
-        name=layer_type,
+        image=_write_overlay_png(image_rgba), bounds=image_bounds,
+        opacity=0.7, name=layer_type,
     ).add_to(m)
-
     folium.LayerControl().add_to(m)
-    st_data = st_folium(m, width=1000, height=600)
 
-    render_map_click_info(st_data, data, crs, transf, nodata, layer_type)
+    st_data = st_folium(m, width=1000, height=600, key="map")
+
+    # Click readout: for the live layers this runs the point query, which
+    # reports the physical quantities behind the number as well.
+    if layer_type in LIVE_LAYERS and grid is not None:
+        render_live_analytics(grid, rainfall, st_data, data, layer_type, RISK, transf)
+    else:
+        render_map_click_info(st_data, data, crs, transf, meta["nodata"], layer_type)
+
     render_place_search(KNOWN_PLACES)
 
-    if advanced_mode and layer_type == "Flood Probability":
-        render_advanced_analytics(data, maps, rainfall, GEO, RISK, VIZ, transf)
-
-elif layer_type not in ("Flood Probability", "Conformal Confidence"):
-    # The two model layers print their own, more specific, generation
-    # instructions above; this is the fallback for a missing source raster.
-    st.warning("No data loaded. Please check file paths and try again.")
-    st.info(f"Looking for data in: {OUTPUT_DIR} and {GEOAI_NEW_DIR}")
+elif layer_type not in LIVE_LAYERS and layer_type != "Conformal Confidence":
+    st.warning("No data loaded. Check the file paths and try again.")
+    st.info(f"Looking in: {OUTPUT_DIR} and {GEOAI_NEW_DIR}")

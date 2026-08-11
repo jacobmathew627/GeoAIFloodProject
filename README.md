@@ -7,6 +7,70 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
 
+## Live rainfall evaluation
+
+The two model layers are computed **on demand**. Moving the rainfall slider
+re-evaluates the model at that depth in roughly 60–90 ms; nothing is
+interpolated between pre-rendered scenario rasters.
+
+That is possible because both surfaces are closed-form in rainfall:
+
+```
+fluvial(x, P) = sigma( logit(S(x)) + beta * ln( Q(x,P) / Q(x,P_ref) ) )
+pluvial(x, P) = f( routed SCS-CN runoff(P), local gradient )
+```
+
+`S` is the learned susceptibility and does not depend on rainfall, so it is
+loaded once. `Q` is SCS-CN runoff, which depends on a pixel only through its
+curve number — and there are just seven curve numbers in this district. So a
+new rainfall value costs seven scalar evaluations plus array arithmetic on the
+display grid, with **no re-routing and no model re-fit**.
+
+```bash
+python src/live_model.py --build       # precompute, ~30 s, writes a 5.9 MB cache
+python src/live_model.py --benchmark   # 60-90 ms per rainfall value
+```
+
+Verified by driving the app: at 50 / 120 / 200 / 300 mm the rendered overlay is
+four distinct images, and the reported expected flooded area moves 1 → 4 → 12 →
+25 km².
+
+### Two layers, deliberately not blended
+
+| Layer | What it is | Trust |
+|---|---|---|
+| **Flood Probability (live)** | Probability of riverine/backwater inundation | Calibrated. Spatial-block AUC 0.919, conformal coverage guarantee. |
+| **Waterlogging Index (live)** | Rain-driven waterlogging pressure, 0–1 | **Unvalidated.** Physics only. |
+
+They answer different questions and only one is calibrated. Averaging them
+would launder the unvalidated one into the other's credibility, so the app
+keeps them as separate layers with separate colour ramps, and the waterlogging
+layer carries a warning banner.
+
+The point query returns both, alongside the physical quantities behind them —
+land cover, curve number, runoff depth and runoff coefficient — so a number can
+always be traced to the reason for it.
+
+### Why the waterlogging index is not a probability
+
+It is routed SCS-CN runoff over local gradient: a topographic wetness index in
+which real runoff replaces catchment area, so it responds to storm depth and to
+land cover rather than to terrain alone. It is honest physics and it ranks
+locations, but it has never been tested against waterlogging, because **there
+are no urban waterlogging records for this district**. Measured against the one
+label that does exist — the 2018 inventory — it scores AUC 0.53 inside built-up
+areas, which is chance. That is expected, since that inventory contains almost
+no urban flooding, but it means nothing is demonstrated.
+
+A fill-spill depression model was implemented first and abandoned. The DEM is
+30 m horizontally with **1 m vertical quantisation**, and street ponding is
+0.1–0.5 m deep. Filling it produced depressions with a median depth of 3.0 m
+and a maximum of 28 m — regional basins, not urban hollows — and put 2 m of
+standing water in central Ernakulam at 50 mm of rain. `pluvial.fill_depressions`
+is kept and tested because it is correct; the DEM is what cannot support it.
+Street-scale ponding needs a LiDAR DEM, ideally 1 m with sub-decimetre vertical
+accuracy.
+
 ## Read this first: what the model does and does not predict
 
 **It does not predict urban waterlogging.** It predicts the extent of
