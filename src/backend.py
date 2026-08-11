@@ -1,188 +1,273 @@
 """
-GeoAI Flood Risk Dashboard – FastAPI Backend
-Serves:
-  GET /api/scenarios      → available rainfall scenarios
-  POST /api/predict       → run inference for a given rainfall value
-  GET /api/map/{mm}       → return flood probability raster as PNG tiles
-  GET /api/risk_stats/{mm} → risk class stats for the given rainfall
-  GET /                   → serve the Leaflet frontend
-"""
+GeoAI Flood Risk Dashboard - FastAPI backend.
 
-import os
-import io
-import json
+Routes
+------
+GET  /api/health              service and data readiness
+GET  /api/scenarios           available rainfall scenarios
+GET  /api/model               susceptibility model card and CV metrics
+GET  /api/map/{mm}            hazard overlay (base64 PNG) + WGS84 bounds
+GET  /api/risk_stats/{mm}     risk-class breakdown with real areas
+GET  /api/runoff              SCS-CN runoff response for a curve number
+GET  /api/places              known place lookup
+GET  /                        static dashboard
+"""
+from __future__ import annotations
+
+import logging
 import sys
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 import numpy as np
 import rasterio
-from rasterio.enums import Resampling
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, Response, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from PIL import Image
-import base64
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
 
-# ----- Path setup -----
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-sys.path.insert(0, BASE_DIR)
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(BASE_DIR))
 
-PROCESSED_DIR = os.path.join(PROJECT_ROOT, "processed")
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, "outputs")
-MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "geoai_flood_final.pth")
-STATIC_DIR = os.path.join(PROJECT_ROOT, "static")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(STATIC_DIR, exist_ok=True)
+from config import (  # noqa: E402
+    API,
+    GEO,
+    HYDRO,
+    KNOWN_PLACES,
+    MODELS_DIR,
+    OUTPUT_DIR,
+    RAINFALL,
+    RASTER,
+    RISK,
+    STATIC_DIR,
+    setup_logging,
+)
+from visualization import compute_risk_stats, prob_to_png_b64  # noqa: E402
 
-# ----- FastAPI App -----
-app = FastAPI(title="GeoAI Flood Risk API", version="1.0")
+LOGGER = setup_logging(logging.INFO)
 
-# ----- Colour ramp for probability -----
-# Low (green) → Moderate (yellow) → High (orange) → Critical (red)
-COLORMAP = [
-    (0.00, (26, 152, 80)),
-    (0.10, (145, 207, 96)),
-    (0.20, (254, 224, 139)),
-    (0.35, (253, 174, 97)),
-    (0.55, (215, 48, 39)),
-    (1.00, (165, 0, 38)),
-]
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
-PLACES = {
-    "Ernakulam": [9.980, 76.280],
-    "MG Road": [9.966, 76.287],
-    "Edappally": [10.024, 76.308],
-    "Kaloor": [9.994, 76.292],
-    "Vyttila": [9.966, 76.318],
-    "Aluva": [10.108, 76.357],
-    "Kakkanad": [10.011, 76.340],
-    "Perumbavoor": [10.109, 76.475],
-    "Muvattupuzha": [9.982, 76.582],
-    "North Paravur": [10.158, 76.214],
-}
+app = FastAPI(title="GeoAI Flood Risk API", version="3.0")
+
+# The dashboard is served from a different origin during development, and the
+# CORS policy was configured in APIConfig but never actually applied.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=API.cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 
-# ----- Helpers -----
-def apply_colormap(prob: np.ndarray) -> np.ndarray:
-    """Convert (H,W) float32 [0-1] flood probability → (H,W,4) RGBA uint8."""
-    rgba = np.zeros((*prob.shape, 4), dtype=np.uint8)
-    for i in range(len(COLORMAP) - 1):
-        v0, c0 = COLORMAP[i]
-        v1, c1 = COLORMAP[i + 1]
-        mask = (prob >= v0) & (prob <= v1)
-        if not mask.any():
-            continue
-        t = (prob[mask] - v0) / (v1 - v0 + 1e-6)
-        for ch in range(3):
-            rgba[mask, ch] = (c0[ch] * (1 - t) + c1[ch] * t).astype(np.uint8)
-        rgba[mask, 3] = 200  # semi-transparent
-    return rgba
+# ──────────────────────────────────────────────
+# Raster access
+# ──────────────────────────────────────────────
+def hazard_path(rainfall_mm: int) -> Path:
+    return OUTPUT_DIR / f"flood_hazard_{int(rainfall_mm)}mm.tif"
 
 
-def load_prob_tif(rainfall_mm: int) -> tuple[np.ndarray, rasterio.profiles.Profile]:
-    p = os.path.join(OUTPUT_DIR, f"flood_prob_final_{rainfall_mm}mm.tif")
-    if not os.path.exists(p):
-        raise FileNotFoundError(f"No pre-computed map for {rainfall_mm}mm. Run inference first.")
-    with rasterio.open(p) as src:
+@lru_cache(maxsize=8)
+def load_hazard(rainfall_mm: int) -> tuple:
+    """Load a hazard raster. Cached: these are 42M-pixel files."""
+    path = hazard_path(rainfall_mm)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No hazard map for {rainfall_mm} mm. "
+            "Run `python src/susceptibility.py --train --predict` then `python src/hazard.py`."
+        )
+
+    with rasterio.open(path) as src:
         data = src.read(1).astype(np.float32)
-        profile = src.profile.copy()
         bounds = src.bounds
         crs = str(src.crs)
-    return data, profile, bounds, crs
+        transform = src.transform
+        nd = src.nodata if src.nodata is not None else RASTER.nodata_value
+
+    data[~np.isfinite(data)] = RASTER.nodata_value
+    data[data == np.float32(nd)] = RASTER.nodata_value
+    return data, bounds, crs, transform
 
 
-def prob_to_png_b64(prob: np.ndarray, max_dim: int = 1024) -> str:
-    """Downscale → RGBA → base64 PNG."""
-    h, w = prob.shape
-    scale = min(max_dim / max(h, w), 1.0)
-    new_h, new_w = int(h * scale), int(w * scale)
-    prob_small = np.array(Image.fromarray(prob).resize((new_w, new_h), Image.BILINEAR))
-    rgba = apply_colormap(prob_small)
-    img = Image.fromarray(rgba, mode="RGBA")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
+def available_scenarios() -> list:
+    return [mm for mm in RAINFALL.scenarios if hazard_path(int(mm)).exists()]
 
 
-# ----- API Routes -----
+# ──────────────────────────────────────────────
+# Routes
+# ──────────────────────────────────────────────
+@app.get("/api/health")
+def health() -> Dict[str, Any]:
+    scenarios = available_scenarios()
+    model_file = MODELS_DIR / "susceptibility_model.joblib"
+    return {
+        "status": "ok" if scenarios else "degraded",
+        "hazard_scenarios_available": len(scenarios),
+        "susceptibility_model_present": model_file.exists(),
+        "susceptibility_surface_present": (OUTPUT_DIR / "susceptibility.tif").exists(),
+        "output_dir": str(OUTPUT_DIR),
+    }
+
+
 @app.get("/api/scenarios")
-def get_scenarios():
-    available = []
-    for mm in [100, 150, 200]:
-        p = os.path.join(OUTPUT_DIR, f"flood_prob_final_{mm}mm.tif")
-        available.append({"rainfall_mm": mm, "available": os.path.exists(p)})
-    return JSONResponse(available)
+def get_scenarios() -> JSONResponse:
+    available = set(available_scenarios())
+    return JSONResponse(
+        [
+            {"rainfall_mm": mm, "available": mm in available}
+            for mm in RAINFALL.scenarios
+        ]
+    )
 
 
-class InferRequest(BaseModel):
-    rainfall_mm: float = 150.0
+@app.get("/api/model")
+def model_card() -> Dict[str, Any]:
+    """Model provenance and held-out performance."""
+    import json
 
-
-@app.post("/api/predict")
-def predict(req: InferRequest):
-    try:
-        from inference_final import run_inference
-        prob, profile = run_inference(req.rainfall_mm)
-        return {"status": "ok", "rainfall_mm": req.rainfall_mm,
-                "max_prob": float(prob.max()), "mean_prob": float(prob.mean())}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    metrics_path = MODELS_DIR / "susceptibility_metrics.json"
+    if not metrics_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Model metrics not found. Run `python src/susceptibility.py --train`.",
+        )
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    return {
+        "susceptibility": metrics,
+        "rainfall_response": {
+            "method": "SCS Curve Number",
+            "initial_abstraction_ratio": HYDRO.initial_abstraction_ratio,
+            "antecedent_moisture_condition": HYDRO.amc,
+            "reference_event_mm": RAINFALL.reference_event_mm,
+        },
+        "domain_note": (
+            "Permanent water bodies are excluded from the model domain; they "
+            "accounted for 80.3% of the raw Sentinel-1 flood inventory."
+        ),
+    }
 
 
 @app.get("/api/map/{mm}")
-def get_map(mm: int):
-    """Return overlay image (base64 PNG) + bounds for Leaflet."""
+def get_map(mm: int) -> JSONResponse:
+    """Hazard overlay as a base64 PNG plus WGS84 bounds for Leaflet."""
     try:
-        prob, profile, bounds, crs = load_prob_tif(mm)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        data, bounds, crs, _ = load_hazard(mm)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     from pyproj import Transformer
-    tr = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-    lon_min, lat_min = tr.transform(bounds.left, bounds.bottom)
-    lon_max, lat_max = tr.transform(bounds.right, bounds.top)
 
-    img_b64 = prob_to_png_b64(prob)
-    return JSONResponse({
-        "image_b64": img_b64,
-        "bounds": [[lat_min, lon_min], [lat_max, lon_max]]
-    })
+    transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+    lon_min, lat_min = transformer.transform(bounds.left, bounds.bottom)
+    lon_max, lat_max = transformer.transform(bounds.right, bounds.top)
+
+    return JSONResponse(
+        {
+            "rainfall_mm": mm,
+            "image_b64": prob_to_png_b64(data),
+            "bounds": [[lat_min, lon_min], [lat_max, lon_max]],
+        }
+    )
 
 
 @app.get("/api/risk_stats/{mm}")
-def risk_stats(mm: int):
+def risk_stats(mm: int) -> Dict[str, Any]:
     try:
-        prob, _, _, _ = load_prob_tif(mm)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        data, _, _, transform = load_hazard(mm)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    valid = prob[prob >= 0]
-    total = valid.size
+    stats = compute_risk_stats(data, RISK, transform)
+    stats["rainfall_mm"] = mm
+    return stats
+
+
+@app.get("/api/runoff")
+def runoff(
+    rainfall_mm: float = Query(150.0, ge=0.0, le=2000.0),
+    curve_number: Optional[float] = Query(None, ge=30.0, le=100.0),
+) -> Dict[str, Any]:
+    """SCS-CN runoff depth for a given storm and curve number."""
+    from hydrology import adjust_cn_for_amc, potential_retention, runoff_depth
+
+    cn_ii = curve_number if curve_number is not None else HYDRO.default_curve_number
+    cn = adjust_cn_for_amc(np.array([[cn_ii]], dtype=np.float32), HYDRO.amc)
+    q = float(runoff_depth(rainfall_mm, cn)[0, 0])
+
     return {
-        "rainfall_mm": mm,
-        "safe_pct":     round(float((valid < 0.10).mean() * 100), 2),
-        "moderate_pct": round(float(((valid >= 0.10) & (valid < 0.25)).mean() * 100), 2),
-        "high_pct":     round(float(((valid >= 0.25) & (valid < 0.50)).mean() * 100), 2),
-        "critical_pct": round(float((valid >= 0.50).mean() * 100), 2),
-        "mean_prob":    round(float(valid.mean()), 4),
-        "max_prob":     round(float(valid.max()), 4),
+        "rainfall_mm": rainfall_mm,
+        "curve_number_amc_ii": cn_ii,
+        "curve_number_adjusted": float(cn[0, 0]),
+        "antecedent_moisture_condition": HYDRO.amc,
+        "potential_retention_mm": float(potential_retention(cn)[0, 0]),
+        "runoff_depth_mm": q,
+        "runoff_coefficient": q / rainfall_mm if rainfall_mm > 0 else 0.0,
+    }
+
+
+@app.get("/api/conformal")
+def conformal_summary() -> Dict[str, Any]:
+    """
+    Distribution-free coverage guarantee for the susceptibility map.
+
+    Returns the calibrated prediction-set thresholds plus the achieved
+    coverage, both marginally and per probability stratum. The per-stratum
+    numbers matter more than the headline: marginal coverage can meet its
+    target while the high-risk band fails.
+    """
+    import json
+
+    metrics_path = MODELS_DIR / "susceptibility_metrics.json"
+    if not metrics_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Model metrics not found. Run `python src/susceptibility.py --train`.",
+        )
+
+    summary = json.loads(metrics_path.read_text(encoding="utf-8")).get("conformal")
+    if not summary:
+        raise HTTPException(
+            status_code=404, detail="This model was trained without conformal calibration."
+        )
+
+    from conformal import SET_LABELS
+
+    return {
+        **summary,
+        "set_codes": {str(k): v for k, v in SET_LABELS.items()},
+        "raster": "outputs/conformal_sets.tif",
+        "note": (
+            "Coverage is guaranteed marginally over district pixels exchangeable "
+            "with the calibration sample. Check conditional_coverage before acting "
+            "on the high-probability band."
+        ),
     }
 
 
 @app.get("/api/places")
-def get_places():
-    return PLACES
+def get_places() -> Dict[str, Any]:
+    return {
+        "places": KNOWN_PLACES,
+        "map_center": list(GEO.map_center),
+        "zoom_start": GEO.zoom_start,
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
-def index():
-    html_path = os.path.join(PROJECT_ROOT, "static", "index.html")
-    if not os.path.exists(html_path):
-        return HTMLResponse("<h1>Dashboard not built yet. Run serve.py first.</h1>")
-    with open(html_path, encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+def index() -> HTMLResponse:
+    html_path = STATIC_DIR / "index.html"
+    if not html_path.exists():
+        return HTMLResponse(
+            "<h1>GeoAI Flood Risk API</h1>"
+            "<p>No static dashboard bundled. See <a href='/docs'>/docs</a>.</p>",
+            status_code=200,
+        )
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
+
+    uvicorn.run(app, host=API.host, port=API.port, reload=API.reload)

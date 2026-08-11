@@ -1,0 +1,23 @@
+{
+  "n_nodes": 11669,
+  "n_scored": 11669,
+  "n_edges": 11118,
+  "positive_fraction_threshold": 0.1,
+  "node_base_rate": 0.05176107635615734,
+  "graph_gnn": {
+    "auc_roc": 0.9009863449873265,
+    "auc_pr": 0.437021220866712
+  },
+  "mlp_no_edges": {
+    "auc_roc": 0.9541216412349661,
+    "auc_pr": 0.5931042901461089
+  },
+  "tabular_gbt": {
+    "auc_roc": 0.9487059459006533,
+    "auc_pr": 0.6414731861380735
+  },
+  "graph_contribution_auc": -0.053135296247639574,
+  "graph_contribution_auc_pr": -0.15608306927939686,
+  "gnn_vs_best_tabular_auc": -0.04771960091332672,
+  "min_area_km2": 0.05
+}

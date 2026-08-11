@@ -1,11 +1,30 @@
+# Runtime dependencies for the dashboard, API and susceptibility model.
+# Legacy PyTorch U-Net inference (src/inference_final.py) additionally needs
+# torch; install it separately with `pip install -r requirements-legacy.txt`.
+
+# Geospatial
+rasterio==1.4.3
+pyproj==3.7.1
+
+# Numerics
+numpy==1.26.4
+scipy==1.15.3
+pandas==2.3.3
+
+# Model (susceptibility.py needs both; joblib is the persistence format)
+scikit-learn==1.5.1
+joblib==1.4.2
+
+# Dashboard
 streamlit==1.42.0
 streamlit-folium==0.23.2
 folium==0.19.3
-rasterio==1.4.3
-numpy==1.26.4
-pyproj==3.7.1
 matplotlib==3.10.1
 Pillow==11.1.0
+
+# API
+fastapi==0.111.0
+uvicorn==0.30.0
+
+# HTTP (live weather)
 requests==2.32.5
-pandas==2.3.3
-scipy==1.15.3

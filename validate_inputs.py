@@ -1,9 +1,20 @@
-import os
-import rasterio
-import numpy as np
+"""Report shape/CRS/nodata consistency across a folder of GeoTIFFs.
 
-folder_path = r"C:\Users\Asus\Documents\GeoAI_Flood_Project\GeoAI_Data"
-GT_MASTER = os.path.join(folder_path, "Ground_Truth_Fixed.tif")
+Defaults to GeoAI_New/, the folder align_data.py reads from. Pass a different
+folder as the first argument.
+"""
+import os
+import sys
+
+import numpy as np
+import rasterio
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# Was hardcoded to an absolute path on one developer's machine, and pointed at
+# GeoAI_Data/ which is gitignored and absent from the repository.
+folder_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(PROJECT_ROOT, "GeoAI_New")
+GT_MASTER = os.path.join(folder_path, "Ground_Truth_Final.tif")
 print(f"============================================================")
 print(f"       GEOAI FOLDER VALIDATION REPORT")
 print(f"============================================================")

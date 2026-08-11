@@ -1,0 +1,255 @@
+{
+  "features": [
+    "dem",
+    "slope",
+    "hand",
+    "twi",
+    "tpi",
+    "spi",
+    "flow",
+    "river_dist",
+    "urban_dist",
+    "ndvi",
+    "ndwi",
+    "urban_mask",
+    "curve_number",
+    "upstream_cn",
+    "dem_rel_1km"
+  ],
+  "n_samples": 115420,
+  "n_positive": 57092,
+  "block_size_px": 500,
+  "seed": 42,
+  "cv": {
+    "random": {
+      "scheme": "random k-fold",
+      "auc_roc": 0.977341668710032,
+      "auc_pr": 0.9754942055785966,
+      "brier": 0.05740569038965113,
+      "n_folds": 5
+    },
+    "spatial_block": {
+      "scheme": "spatial block",
+      "auc_roc": 0.9190871693201683,
+      "auc_pr": 0.9112252292685241,
+      "brier": 0.11858306911106196,
+      "n_folds": 5
+    },
+    "spatial_low_lying": {
+      "scheme": "spatial (low-lying)",
+      "auc_roc": 0.905833170143044,
+      "auc_pr": 0.8984470744852815,
+      "brier": 0.13117518163320524,
+      "n_folds": 5
+    }
+  },
+  "low_lying_dem_cutoff_m": 7.0,
+  "auc_inflation_from_spatial_autocorrelation": 0.05825449938986371,
+  "worst_calibration_gap_balanced_scale": 0.03297864353023777,
+  "domain_prevalence": 0.014026109161327632,
+  "domain_pixels": 22299912,
+  "presence_pixels": 312781,
+  "prior_logit_offset_closed_form": -4.231291090767408,
+  "prior_logit_offset_fitted": -3.772952374691302,
+  "expected_flooded_km2_at_reference": 31.278100000000006,
+  "observed_flooded_km2": 31.278100000000002,
+  "conformal": {
+    "thresholds": {
+      "alpha": 0.1,
+      "q": 0.9653013202495512,
+      "include_positive_above": 0.034698679750448824,
+      "include_negative_below": 0.01991463053674175,
+      "n_calibration": 185303,
+      "mondrian": true
+    },
+    "marginal_coverage": 0.8790057073266386,
+    "target_coverage": 0.9,
+    "mean_set_size": 0.9553682928591333,
+    "class_conditional_coverage": {
+      "flood": 0.9332694763729247,
+      "dry": 0.8781142803193219
+    },
+    "conditional_coverage": [
+      {
+        "p_low": 2.298412778289617e-08,
+        "p_high": 0.00018352448404651003,
+        "n": 35616,
+        "positives": 0,
+        "coverage": 1.0
+      },
+      {
+        "p_low": 0.00018352448404651003,
+        "p_high": 0.0004923745247204846,
+        "n": 38970,
+        "positives": 1,
+        "coverage": 0.9999743392353092
+      },
+      {
+        "p_low": 0.0004923745247204846,
+        "p_high": 0.0016731203236776712,
+        "n": 39747,
+        "positives": 1,
+        "coverage": 0.9999748408684932
+      },
+      {
+        "p_low": 0.0016731203236776712,
+        "p_high": 0.011383905326236872,
+        "n": 40402,
+        "positives": 23,
+        "coverage": 0.9994307212514232
+      },
+      {
+        "p_low": 0.011383905326236872,
+        "p_high": 0.9999564935210974,
+        "n": 39051,
+        "positives": 3107,
+        "coverage": 0.4002202248341912
+      }
+    ],
+    "marginal_variant": {
+      "thresholds": {
+        "alpha": 0.1,
+        "q": 0.024690759189971698,
+        "include_positive_above": 0.9753092408100283,
+        "include_negative_below": 0.024690759189971698,
+        "n_calibration": 185303,
+        "mondrian": false
+      },
+      "marginal_coverage": 0.8753470322933545,
+      "target_coverage": 0.9,
+      "mean_set_size": 0.8758527447803247,
+      "class_conditional_coverage": {
+        "flood": 0.010217113665389528,
+        "dry": 0.8895590965833394
+      },
+      "conditional_coverage": [
+        {
+          "p_low": 2.298412778289617e-08,
+          "p_high": 0.00018352448404651003,
+          "n": 35616,
+          "positives": 0,
+          "coverage": 1.0
+        },
+        {
+          "p_low": 0.00018352448404651003,
+          "p_high": 0.0004923745247204846,
+          "n": 38970,
+          "positives": 1,
+          "coverage": 0.9999743392353092
+        },
+        {
+          "p_low": 0.0004923745247204846,
+          "p_high": 0.0016731203236776712,
+          "n": 39747,
+          "positives": 1,
+          "coverage": 0.9999748408684932
+        },
+        {
+          "p_low": 0.0016731203236776712,
+          "p_high": 0.011383905326236872,
+          "n": 40402,
+          "positives": 23,
+          "coverage": 0.9994307212514232
+        },
+        {
+          "p_low": 0.011383905326236872,
+          "p_high": 0.9999564935210974,
+          "n": 39051,
+          "positives": 3107,
+          "coverage": 0.3820644797828481
+        }
+      ]
+    },
+    "calibration_blocks": 61,
+    "evaluation_blocks": 61
+  },
+  "permutation_importance": {
+    "dem": 0.09698054347676785,
+    "slope": 0.0670857746847916,
+    "hand": 0.024985775320565784,
+    "twi": 0.007716230529860457,
+    "tpi": 0.014717221218572107,
+    "spi": 0.00532502837588209,
+    "flow": 0.012377680330930164,
+    "river_dist": 0.03799171493969915,
+    "urban_dist": 0.07306289219936646,
+    "ndvi": 0.008925179176114595,
+    "ndwi": 0.0294752045412922,
+    "urban_mask": -2.9153383504931794e-05,
+    "curve_number": 0.039897431542273806,
+    "upstream_cn": 0.021381128600558786,
+    "dem_rel_1km": 0.059949164871219394
+  },
+  "reliability": [
+    {
+      "bin_low": 0.0,
+      "bin_high": 0.1,
+      "predicted": 0.02612603164507793,
+      "observed": 0.024041834066704928,
+      "n": 15681
+    },
+    {
+      "bin_low": 0.1,
+      "bin_high": 0.2,
+      "predicted": 0.14582743546316532,
+      "observed": 0.15736859077716867,
+      "n": 3101
+    },
+    {
+      "bin_low": 0.2,
+      "bin_high": 0.30000000000000004,
+      "predicted": 0.22901681315421507,
+      "observed": 0.24736842105263157,
+      "n": 2850
+    },
+    {
+      "bin_low": 0.30000000000000004,
+      "bin_high": 0.4,
+      "predicted": 0.33159035967592526,
+      "observed": 0.3516330785267547,
+      "n": 2878
+    },
+    {
+      "bin_low": 0.4,
+      "bin_high": 0.5,
+      "predicted": 0.4356970107124268,
+      "observed": 0.46867565424266455,
+      "n": 2522
+    },
+    {
+      "bin_low": 0.5,
+      "bin_high": 0.6000000000000001,
+      "predicted": 0.5509911446367775,
+      "observed": 0.5519070472341501,
+      "n": 3959
+    },
+    {
+      "bin_low": 0.6000000000000001,
+      "bin_high": 0.7000000000000001,
+      "predicted": 0.6426100293078199,
+      "observed": 0.6451885199774902,
+      "n": 3554
+    },
+    {
+      "bin_low": 0.7000000000000001,
+      "bin_high": 0.8,
+      "predicted": 0.7467517703659097,
+      "observed": 0.7540437678401523,
+      "n": 4204
+    },
+    {
+      "bin_low": 0.8,
+      "bin_high": 0.9,
+      "predicted": 0.867524779243878,
+      "observed": 0.8653689082493874,
+      "n": 7346
+    },
+    {
+      "bin_low": 0.9,
+      "bin_high": 1.0,
+      "predicted": 0.9520859932914326,
+      "observed": 0.9510116229014206,
+      "n": 11615
+    }
+  ]
+}

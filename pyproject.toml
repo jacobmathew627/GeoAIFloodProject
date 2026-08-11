@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geoai-flood"
+version = "2.0.0"
+description = "GeoAI Flood Risk Dashboard for Ernakulam, Kerala"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit==1.42.0",
+    "streamlit-folium==0.23.2",
+    "folium==0.19.3",
+    "rasterio==1.4.3",
+    "numpy==1.26.4",
+    "pyproj==3.7.1",
+    "matplotlib==3.10.1",
+    "Pillow==11.1.0",
+    "requests==2.32.5",
+    "pandas==2.3.3",
+    "scipy==1.15.3",
+    "scikit-learn==1.5.1",
+    "joblib==1.4.2",
+    "fastapi==0.111.0",
+    "uvicorn==0.30.0",
+]
+
+[project.optional-dependencies]
+# Only needed for src/inference_final.py, the archived U-Net path.
+legacy = ["torch==2.3.0"]
+dev = [
+    "pytest==8.2.0",
+    "pytest-cov==5.0.0",
+    "ruff==0.5.0",
+    "black==24.4.0",
+    "mypy==1.10.0",
+    "pre-commit==3.7.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+# pytest configuration lives in pytest.ini. Duplicating it here is a trap:
+# pytest.ini wins silently, so edits made in pyproject.toml have no effect.
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]

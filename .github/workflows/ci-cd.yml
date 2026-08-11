@@ -1,0 +1,164 @@
+name: GeoAI Flood Risk CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.10"
+  PROJECT_ROOT: ${{ github.workspace }}
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev gdal-bin libproj-dev libgeos-dev
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Ruff (linting)
+        run: ruff check src/ tests/ app.py serve.py align_data.py
+
+      - name: Run Black (format check)
+        run: black --check src/ tests/ app.py serve.py align_data.py
+
+      - name: Run MyPy (type checking)
+        # src/ modules import each other by bare name, so it must be on the
+        # path for mypy to resolve them.
+        run: mypy src/ --ignore-missing-imports
+        env:
+          MYPYPATH: src
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev gdal-bin libproj-dev libgeos-dev
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing -m "not requires_model"
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  integration-tests:
+    name: Integration Tests (requires models)
+    runs-on: ubuntu-latest
+    if: false  # Disabled by default - enable when models are available in CI
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev gdal-bin libproj-dev libgeos-dev
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run integration tests
+        run: pytest tests/ -v -m "requires_model"
+
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, unit-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (Streamlit)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          dockerfile: Dockerfile
+          target: app
+          tags: geoai-flood:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        # The src/ modules import each other by bare name (`from config import
+        # ...`), so they are imported with src/ on sys.path rather than as a
+        # `src.` package -- `import src.config` would fail at the first
+        # intra-module import.
+        run: |
+          docker run --rm geoai-flood:latest python -c \
+            "import sys; sys.path.insert(0, 'src'); import config, hydrology, hazard; print('Imports OK')"
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging
+    steps:
+      - name: Deploy to staging
+        run: |
+          echo "Deploy to staging environment..."
+          # Add your deployment commands here
+          # e.g., kubectl apply, docker-compose up, etc.
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Deploy to production
+        run: |
+          echo "Deploy to production environment..."
+          # Add your production deployment commands here

@@ -22,8 +22,11 @@ env/
 # models/*.pth
 # models/*.h5
 
-# Local test files
-test_*.py
+# Scratch test scripts at the repo root only.
+# NOTE: this pattern used to be `test_*.py`, which is unanchored and so also
+# matched tests/test_*.py -- the entire test suite was untracked while CI ran
+# `pytest tests/` against a directory that contained nothing.
+/test_*.py
 *.log
 *.tmp
 sentinel_data/
@@ -33,6 +36,12 @@ archive/
 processed/
 GeoAI_Data/
 
+# Build artefacts from align_data.py (~2.6 GB, fully regenerable).
+data_aligned/
+
+# Model artefacts produced by src/susceptibility.py
+models/susceptibility_model.joblib
+
 # IDE
 .vscode/
 .idea/
@@ -41,3 +50,8 @@ GeoAI_Data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Derived model rasters (regenerable: susceptibility.py --predict, hazard.py)
+outputs/susceptibility*.tif
+outputs/conformal_sets.tif
+outputs/flood_hazard_*.tif

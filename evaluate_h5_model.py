@@ -6,9 +6,13 @@ import tensorflow as tf
 from rasterio.warp import reproject, Resampling
 from sklearn.metrics import classification_report, f1_score, precision_score, recall_score, jaccard_score
 
-folder_path = r"C:\Users\Asus\Documents\GeoAI_Flood_Project\GeoAI_Data"
-model_path = os.path.join(folder_path, "Ernakulam_Flood_UNet.h5")
-GT_MASTER = os.path.join(folder_path, "Ground_Truth_Fixed.tif") # (17946, 11849)
+# Paths derived from this file's location rather than hardcoded to one
+# machine. The original GeoAI_Data/ folder is gitignored and absent; the
+# rasters live in GeoAI_New/ and the model in models/.
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+folder_path = os.path.join(PROJECT_ROOT, "GeoAI_New")
+model_path = os.path.join(PROJECT_ROOT, "models", "Ernakulam_Flood_UNet_Ultra.h5")
+GT_MASTER = os.path.join(folder_path, "Ground_Truth_Fixed.tif")  # (17946, 11849)
 
 # We know from health_check.ipynb that the original training target was exactly (5690, 7375).
 # Some files like LULC are (5690, 7374). We will force alignment to (5690, 7375) to test the model.

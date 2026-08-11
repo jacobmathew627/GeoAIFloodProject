@@ -1,25 +1,40 @@
+"""
+DEPRECATED -- DO NOT RUN. Kept only as a record of how the
+`flood_prob_*mm_supercharged.tif` files in outputs/ were produced.
+
+This script does not use the trained model at all. Its own comments describe
+it as a "Mock-Simulation" that uses weighted Multi-Criteria Decision Analysis
+to "simulate exactly what the trained Attention U-Net would predict". The
+rasters it wrote were then surfaced in the dashboard as AI model output, and
+the rainfall response was three hard-coded multipliers (0.8 / 1.6 / 2.6)
+applied directly to a probability, which is why the shipped 100 mm map had a
+higher mean probability than the 150 mm map.
+
+It is also broken independently of that: TEMPLATE_PATH points at
+`processed/LULC_aligned.tif`, a directory that is gitignored and absent.
+
+Replaced by:
+    python src/susceptibility.py --train --predict   # learned susceptibility
+    python src/hazard.py                             # SCS-CN rainfall response
+"""
 import os
-import rasterio
+import sys
+
 import numpy as np
-from rasterio.warp import reproject, Resampling
+import rasterio
+from rasterio.warp import Resampling, reproject
 
-# ==========================================================
-# GeoAI Advanced Prediction Generator (Mock-Simulation)
-# ==========================================================
-# This script bridges the gap between Python 3.14 (no local TF) 
-# and the need for high-quality dashboard presentations.
-# It uses Multi-Criteria Decision Analysis (MCDA) via Physics to 
-# simulate exactly what the trained Attention U-Net would predict.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from config import GEOAI_NEW_DIR, OUTPUT_DIR, PROCESSED_DIR  # noqa: E402
 
-DATA_DIR = r"C:\Users\Asus\Documents\GeoAI_Flood_Project\GeoAI_New"
-OUT_DIR = r"C:\Users\Asus\Documents\GeoAI_Flood_Project\outputs"
+DATA_DIR = str(GEOAI_NEW_DIR)
+OUT_DIR = str(OUTPUT_DIR)
+TEMPLATE_PATH = str(PROCESSED_DIR / "LULC_aligned.tif")
 
-# Target Shape and Template to preserve exact alignment for Folium
-TEMPLATE_PATH = r"C:\Users\Asus\Documents\GeoAI_Flood_Project\processed\LULC_aligned.tif"
-
-print("==================================================")
-print("     GEO-AI SYSTEM UPGRADE: HYBRID GENERATOR")
-print("==================================================")
+raise SystemExit(
+    __doc__.strip()
+    + "\n\nRefusing to run: this would overwrite outputs/ with non-model maps."
+)
 
 # 1. Load Alignment Template
 with rasterio.open(TEMPLATE_PATH) as src:

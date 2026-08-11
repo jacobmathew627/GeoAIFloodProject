@@ -9,12 +9,15 @@ from rasterio.warp import reproject, Resampling
 # ==========================================
 # CONFIGURATION
 # ==========================================
-FOLDER_PATH = r"C:\Users\Asus\Documents\GeoAI_Flood_Project\GeoAI_New"
+# Paths are derived from this file's location rather than hardcoded to one
+# developer's machine.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FOLDER_PATH = os.path.join(PROJECT_ROOT, "GeoAI_New")
 MASTER_SHAPE = (5690, 7375)  # The known clean shape
 PATCH_SIZE = 256
 BATCH_SIZE = 8
 EPOCHS = 50
-MODEL_SAVE_PATH = os.path.join(r"C:\Users\Asus\Documents\GeoAI_Flood_Project\models", "Ernakulam_Flood_UNet_Ultra.h5")
+MODEL_SAVE_PATH = os.path.join(PROJECT_ROOT, "models", "Ernakulam_Flood_UNet_Ultra.h5")
 
 FEATURE_FILES = [
     'Ernakulam_Clipped_DEM.tif',        # ch 1  - elevation

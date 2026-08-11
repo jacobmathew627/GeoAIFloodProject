@@ -11,7 +11,8 @@ from matplotlib.colors import LinearSegmentedColormap
 import json
 import os
 
-OUT_DIR = r"C:\Users\Asus\Documents\GeoAI_Flood_Project\evaluation"
+# Derived from this file's location rather than hardcoded to one machine.
+OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.makedirs(OUT_DIR, exist_ok=True)
 
 plt.rcParams.update({
@@ -121,7 +122,7 @@ print("✓ Model Comparison saved")
 # ─────────────────────────────────────────────
 # FIG 3: LEARNING CURVES (Training History)
 # ─────────────────────────────────────────────
-with open(r"C:\Users\Asus\Documents\GeoAI_Flood_Project\evaluation\paper_metrics.json") as f:
+with open(os.path.join(OUT_DIR, "paper_metrics.json")) as f:
     metrics = json.load(f)
 
 th = metrics['training_history']

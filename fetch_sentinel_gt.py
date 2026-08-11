@@ -26,7 +26,13 @@ acts as the target variable for the newly implemented clean pipeline in
 ''')
 
 # Create a marker file to show this step was established
-marker_path = r"C:\Users\Asus\Documents\GeoAI_Flood_Project\GeoAI_Data\Sentinel_GT_Protocol_Established.txt"
+import os as _os
+
+_PROJECT_ROOT = _os.path.dirname(_os.path.abspath(__file__))
+# Was hardcoded to an absolute path on one developer's machine.
+marker_path = _os.path.join(
+    _PROJECT_ROOT, "GeoAI_New", "Sentinel_GT_Protocol_Established.txt"
+)
 with open(marker_path, 'w') as f:
     f.write("Sentinel-1 Ground Truth extraction protocol designed and logged.\n")
 
