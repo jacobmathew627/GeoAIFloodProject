@@ -7,6 +7,49 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
 
+## Read this first: what the model does and does not predict
+
+**It does not predict urban waterlogging.** It predicts the extent of
+riverine and backwater inundation. Those are different phenomena, and the
+distinction is not cosmetic — it decides what the output can be used for.
+
+The evidence, from the shipped rasters:
+
+| | Top 0.1% of predicted hazard | Whole district |
+|---|---|---|
+| Median elevation | **0.0 m** | 29.4 m |
+| Median urban fraction | **0.0** | **1.0** |
+| Median distance to drainage | 3,146 m | 1,083 m |
+
+The district is majority built-up, yet the model's highest-hazard zone is
+almost entirely *not* built-up: sea-level paddy and wetland fringing the
+Vembanad backwaters. Sampled at named places, at the reference event:
+
+| Place | Hazard @332 mm | Band |
+|---|---|---|
+| Aluva (on the Periyar) | 0.029 | moderate |
+| Perumbavoor | 0.007 | safe |
+| Vyttila | 0.003 | safe |
+| Kaloor | 0.002 | safe |
+| Ernakulam / MG Road | 0.001 | safe |
+| Edappally | 0.0005 | safe |
+
+Kochi's urban core reads as essentially zero risk. That is not a bug — it is
+what the training label contains. The inventory is Sentinel-1 open water at a
+single overpass during an event driven by Periyar flooding and reservoir
+releases. Street-level waterlogging is largely invisible to C-band SAR (tree
+canopy, buildings, and it often drains before the satellite passes), and it is
+governed by storm-drain capacity, canal blockage and tidal locking of
+outfalls — none of which are inputs to this model.
+
+**What the output is legitimately good for:** ranking the low-lying rural and
+peri-urban floodplain by relative inundation susceptibility, with calibrated
+probabilities and a coverage guarantee.
+
+**What it is not good for:** answering "will this street flood if 120 mm falls
+tomorrow". See [Known limitations](#known-limitations) for the full list and
+[What would close the gap](#what-would-close-the-gap) for what it would take.
+
 ## Overview
 
 The system separates two things that are physically distinct and were
@@ -434,6 +477,57 @@ These are modelling choices, not measurements. Each is a single constant in
   areas. Every absolute area and exposure figure the system reports inherits
   that floor, which is why the population and damage numbers in the alert
   panel are labelled planning estimates rather than predictions.
+
+## What would close the gap
+
+Ordered by how much each one moves the system toward actually answering
+"will this place waterlog at X mm", not by effort.
+
+1. **A waterlogging-specific label.** The single blocking issue. SAR open-water
+   extent is the wrong target. Municipal complaint logs, KSDMA incident
+   reports, traffic-police road-closure records or geolocated news reports
+   would give a few hundred points of the *right* phenomenon. Even a small
+   validation set would show whether the current surface has any skill at
+   street level — right now that is untested, and the place table above
+   suggests it does not.
+2. **More events, to fit `beta`.** The rainfall sensitivity
+   (`HYDRO.runoff_logit_beta = 1.8`) is currently *assumed*. The shape of the
+   response is physically constrained by SCS-CN, but its magnitude is a hand-set
+   constant, so every non-reference scenario is an extrapolation along a guessed
+   curve. Two more inventories turn it into a fitted parameter and give genuine
+   out-of-event validation. ERA5 says 2019 and 2021 were 197 mm and 117 mm
+   3-day events against 2018's 332 mm — usefully different magnitudes.
+   `src/acquire_flood_event.py` is ready once Earth Engine is authenticated.
+3. **Route the runoff in the hazard step.** `combine()` currently applies
+   SCS-CN *pointwise*: a pixel's forcing is the rain that fell on it, and none
+   of what its catchment delivers. The D8 network in `src/routing.py` already
+   exists and is only used for a static feature. Accumulating `Q(x, P)`
+   downslope would make the rainfall response genuinely spatial. This is the
+   cheapest real improvement on the list.
+4. **Spatially variable rainfall.** Scenarios apply one depth everywhere.
+   Accepting a rainfall raster (IMD gridded, or a forecast field) instead of a
+   scalar is a small interface change with a large realism gain.
+5. **Drainage infrastructure and tide.** Storm-drain capacity, canal network,
+   and outfall tide-locking are what actually determine urban waterlogging in a
+   coastal backwater city. Two pixels with identical terrain and one blocked
+   drain between them currently receive identical predictions.
+6. **Depth, not just probability.** Requires either hydrodynamic modelling or a
+   depth-labelled inventory. Furthest away, and only worth it after 1-3.
+
+## Outstanding engineering
+
+- Three `outputs/flood_prob_*.tif` remain modified but uncommitted; they predate
+  this work and are superseded.
+- The old `fig1`–`fig6` PNGs and `paper_metrics.json` are left in place. Nothing
+  regenerates them; deleting them is a manuscript decision.
+- The archived `.pth` checkpoints were trained on the pre-fix corrupted rasters
+  and should not be used.
+- `urban_mask` (importance 0.000) is still in the feature list; fold its removal
+  into the next retrain.
+- The Streamlit app's data path, rendering and every static layer are
+  smoke-tested, and the FastAPI routes are exercised end to end, but neither
+  server has been run under a browser in this environment. The Docker build and
+  CI workflow have not been executed either.
 
 ## API
 
