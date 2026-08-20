@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from typing import Dict, Tuple
 
 from config import setup_logging
@@ -168,19 +169,46 @@ def acquire(event: str, project: str, scale: int = 30, out_dir: str = "GeoAI_New
 def main() -> None:  # pragma: no cover
     parser = argparse.ArgumentParser(description="Acquire a Sentinel-1 flood inventory")
     parser.add_argument("--event", default="2019", choices=sorted(EVENTS))
-    parser.add_argument("--project", default="empyrean-backup-387418")
+    # No default. The ID previously hardcoded here (empyrean-backup-387418) no
+    # longer exists -- Earth Engine reports "project not found or deleted" --
+    # and a dead default silently sends everyone down the same dead end. Earth
+    # Engine now requires a Cloud project registered for its use; register one
+    # free for research at https://code.earthengine.google.com/register
+    parser.add_argument(
+        "--project",
+        default=os.environ.get("EARTHENGINE_PROJECT") or os.environ.get("EE_PROJECT"),
+        help="Earth Engine Cloud project ID. Defaults to $EARTHENGINE_PROJECT "
+             "or $EE_PROJECT. Register one at "
+             "https://code.earthengine.google.com/register",
+    )
     parser.add_argument("--scale", type=int, default=30)
     args = parser.parse_args()
 
     setup_logging(logging.INFO)
+
+    if not args.project:
+        LOGGER.error(
+            "No Earth Engine project. Earth Engine requires a Cloud project "
+            "registered for its use.\n"
+            "  1. Register one (free for research): "
+            "https://code.earthengine.google.com/register\n"
+            "  2. Then either pass --project YOUR_PROJECT_ID\n"
+            "     or set EARTHENGINE_PROJECT=YOUR_PROJECT_ID"
+        )
+        raise SystemExit(2)
+
     try:
         acquire(args.event, args.project, args.scale)
     except Exception as exc:
         LOGGER.error("%s: %s", type(exc).__name__, exc)
-        LOGGER.error(
-            "If this is an authentication error, run:  "
-            'python -c "import ee; ee.Authenticate()"'
-        )
+        message = str(exc)
+        if "not found or deleted" in message or "has not been used" in message:
+            LOGGER.error(
+                "That project is not registered for Earth Engine. Register it at "
+                "https://code.earthengine.google.com/register"
+            )
+        elif "authorize" in message.lower():
+            LOGGER.error('Run:  python -c "import ee; ee.Authenticate()"')
         raise SystemExit(1)
 
 
