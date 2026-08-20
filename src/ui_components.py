@@ -53,10 +53,17 @@ def render_sidebar(rainfall_cfg, risk_cfg, known_places) -> Dict[str, Any]:
         )
 
     st.sidebar.subheader("Rainfall conditions")
-    use_live = st.sidebar.checkbox("Use live weather API", value=False)
 
     rainfall = None
-    if use_live:
+
+    # The project's own forecast, trained on IMD gridded rainfall. Predicts the
+    # next 3-day total, which is exactly what the hazard model consumes.
+    use_forecast = st.sidebar.checkbox("Use model rainfall forecast", value=False)
+    if use_forecast:
+        rainfall = _fetch_model_forecast()
+
+    use_live = st.sidebar.checkbox("Use live weather API", value=False)
+    if rainfall is None and use_live:
         rainfall = _fetch_live_rainfall(rainfall_cfg)
     if rainfall is None:
         rainfall = float(
@@ -79,6 +86,45 @@ def render_sidebar(rainfall_cfg, risk_cfg, known_places) -> Dict[str, Any]:
         "rainfall": rainfall,
         "is_2018": is_2018,
     }
+
+
+def _fetch_model_forecast() -> Optional[float]:
+    """
+    This project's own short-term rainfall prediction.
+
+    Unlike the live-weather option, which consumes a third party's forecast,
+    this is a model trained here on IMD gauge-based gridded rainfall. Its
+    target is the next 3-day total -- the same quantity the hazard model takes
+    as input -- so the prediction feeds the map directly.
+    """
+    try:
+        import rainfall_forecast
+
+        result = rainfall_forecast.predict_latest()
+        _, metadata = rainfall_forecast.load_model()
+        skill = metadata["scores"]["mae_skill_vs_climatology"]
+
+        st.sidebar.success(
+            f"Forecast next {result['horizon_days']} days: "
+            f"**{result['predicted_total_mm']:.0f} mm**"
+        )
+        st.sidebar.caption(
+            f"As of {result['as_of']}. Trailing 3 days "
+            f"{result['last_3_days_mm']:.0f} mm, 30 days "
+            f"{result['last_30_days_mm']:.0f} mm. "
+            f"Held-out MAE skill vs climatology {skill:+.0%}."
+        )
+        return float(result["predicted_total_mm"])
+    except FileNotFoundError:
+        st.sidebar.warning(
+            "No forecast model. Train it with "
+            "`python src/rainfall_forecast.py --train`."
+        )
+        return None
+    except Exception as exc:
+        LOGGER.warning("Rainfall forecast failed: %s", exc)
+        st.sidebar.error("Forecast unavailable; using the slider.")
+        return None
 
 
 def _fetch_live_rainfall(rainfall_cfg) -> Optional[float]:

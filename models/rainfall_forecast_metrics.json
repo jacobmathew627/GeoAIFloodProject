@@ -1,0 +1,65 @@
+{
+  "target": "total rainfall over the next 3 days, mm",
+  "source": "IMD 0.25 deg gauge-based gridded rainfall",
+  "features": [
+    "rain_t",
+    "rain_t1",
+    "rain_t2",
+    "sum_3d",
+    "sum_7d",
+    "sum_15d",
+    "sum_30d",
+    "wet_days_7d",
+    "max_1d_7d",
+    "doy_sin1",
+    "doy_cos1",
+    "doy_sin2",
+    "doy_cos2"
+  ],
+  "train_years": [
+    1990,
+    2014
+  ],
+  "test_years": [
+    2015,
+    2024
+  ],
+  "n_train": 9101,
+  "n_test": 3650,
+  "scores": {
+    "model": {
+      "mae": 18.06719325346352,
+      "rmse": 31.504912736949212,
+      "corr": 0.6042077752740973
+    },
+    "persistence": {
+      "mae": 19.829572677612305,
+      "rmse": 36.67603566086274,
+      "corr": 0.5564394200893388
+    },
+    "climatology": {
+      "mae": 19.438325450642367,
+      "rmse": 33.6318433678983,
+      "corr": 0.5144400050347775
+    },
+    "mae_skill_vs_climatology": 0.07053756768608577,
+    "mae_skill_vs_persistence": 0.08887631885978675,
+    "exceedance": {
+      "100": {
+        "n_events": 187,
+        "base_rate": 0.05123287671232877,
+        "auc_model": 0.8732513770478132,
+        "auc_persistence": 0.8632773351905012,
+        "auc_climatology": 0.8263529967679719
+      },
+      "200": {
+        "n_events": 27,
+        "base_rate": 0.0073972602739726025,
+        "auc_model": 0.9040696782899378,
+        "auc_persistence": 0.8947567495732,
+        "auc_climatology": 0.8433823003240613
+      }
+    }
+  },
+  "caveat": "Statistical short-range forecast from rainfall history and seasonality. Not NWP, not radar nowcasting. Evaluated on a temporal hold-out against persistence and climatology."
+}

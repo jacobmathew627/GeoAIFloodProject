@@ -61,3 +61,7 @@ models/live_model.npz
 
 # Upstream DEM mosaic (regenerable: python src/upstream_dem.py --build)
 GeoAI_New/Upstream_DEM.tif
+
+# IMD rainfall cache (regenerable via imdlib)
+data/imd_rain/
+models/rainfall_forecast.joblib
