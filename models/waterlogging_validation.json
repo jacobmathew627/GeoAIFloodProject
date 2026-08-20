@@ -1,0 +1,88 @@
+{
+  "rainfall_mm": 150.0,
+  "n_hotspots_documented": 15,
+  "hotspot_elevation_band_m": [
+    8.107781410217285,
+    21.053800249099723
+  ],
+  "fluvial_probability": {
+    "n_hotspots_scored": 14,
+    "scored_points": [
+      "Ernakulam South railway station",
+      "Jos Junction",
+      "Durbar Hall ground",
+      "Rajendra Maidan",
+      "High Court Junction",
+      "Kalamassery",
+      "Kaloor",
+      "Edappally",
+      "Mullassery Canal",
+      "Thevara-Perandoor Canal",
+      "Kadavanthra",
+      "Panampilly Nagar",
+      "Vyttila",
+      "Palarivattom"
+    ],
+    "hotspot_median": 0.0016373672988265753,
+    "urban": {
+      "n_background": 4000,
+      "background_median": 0.00010939418280031532,
+      "auc": 0.8654107142857143,
+      "auc_ci95": [
+        0.7707473214285715,
+        0.9339915178571429
+      ],
+      "beats_chance": true
+    },
+    "urban_elevation_matched": {
+      "n_background": 4000,
+      "background_median": 0.00026870908914133906,
+      "auc": 0.8010714285714285,
+      "auc_ci95": [
+        0.6903491071428571,
+        0.8894
+      ],
+      "beats_chance": true
+    }
+  },
+  "pluvial_index": {
+    "n_hotspots_scored": 14,
+    "scored_points": [
+      "Ernakulam South railway station",
+      "Jos Junction",
+      "Durbar Hall ground",
+      "Rajendra Maidan",
+      "High Court Junction",
+      "Kalamassery",
+      "Kaloor",
+      "Edappally",
+      "Mullassery Canal",
+      "Thevara-Perandoor Canal",
+      "Kadavanthra",
+      "Panampilly Nagar",
+      "Vyttila",
+      "Palarivattom"
+    ],
+    "hotspot_median": 0.6359818577766418,
+    "urban": {
+      "n_background": 4000,
+      "background_median": 0.433630108833313,
+      "auc": 0.8389375,
+      "auc_ci95": [
+        0.7414631696428571,
+        0.9265383928571429
+      ],
+      "beats_chance": true
+    },
+    "urban_elevation_matched": {
+      "n_background": 4000,
+      "background_median": 0.4652360677719116,
+      "auc": 0.8072232142857143,
+      "auc_ci95": [
+        0.6978984375,
+        0.907725
+      ],
+      "beats_chance": true
+    }
+  }
+}

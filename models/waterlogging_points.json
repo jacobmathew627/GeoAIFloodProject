@@ -1,0 +1,100 @@
+[
+  {
+    "name": "Ernakulam South railway station",
+    "source": "Operation Breakthrough phase 4",
+    "resolved_query": "Ernakulam Junction railway station, Ernakulam",
+    "lat": 9.9706145,
+    "lon": 76.2909707
+  },
+  {
+    "name": "Jos Junction",
+    "source": "Operation Breakthrough phase 4",
+    "resolved_query": "Jos Junction, Ernakulam",
+    "lat": 9.968431,
+    "lon": 76.2861098
+  },
+  {
+    "name": "Durbar Hall ground",
+    "source": "Operation Breakthrough phase 4",
+    "resolved_query": "Durbar Hall Road, Ernakulam",
+    "lat": 9.9680341,
+    "lon": 76.2835532
+  },
+  {
+    "name": "Rajendra Maidan",
+    "source": "Operation Breakthrough phase 4",
+    "resolved_query": "Rajendra Maidan, Ernakulam",
+    "lat": 9.9681856,
+    "lon": 76.2804736
+  },
+  {
+    "name": "High Court Junction",
+    "source": "Operation Breakthrough phase 4",
+    "resolved_query": "Kerala High Court, Ernakulam",
+    "lat": 9.9862451,
+    "lon": 76.2749619
+  },
+  {
+    "name": "Kalamassery",
+    "source": "press reporting, 2024 monsoon",
+    "resolved_query": "Kalamassery, Ernakulam, Kerala",
+    "lat": 10.0521676,
+    "lon": 76.3199033
+  },
+  {
+    "name": "Kaloor",
+    "source": "press reporting, 2024 monsoon",
+    "resolved_query": "Kaloor, Ernakulam, Kerala",
+    "lat": 9.9951217,
+    "lon": 76.2920393
+  },
+  {
+    "name": "Edappally",
+    "source": "press reporting, 2024 monsoon",
+    "resolved_query": "Edappally, Ernakulam, Kerala",
+    "lat": 10.0251551,
+    "lon": 76.3113552
+  },
+  {
+    "name": "Mullassery Canal",
+    "source": "Operation Breakthrough",
+    "resolved_query": "Mullassery Canal, Ernakulam",
+    "lat": 9.9759402,
+    "lon": 76.2871021
+  },
+  {
+    "name": "Thevara-Perandoor Canal",
+    "source": "Operation Breakthrough",
+    "resolved_query": "Perandoor Canal, Ernakulam",
+    "lat": 10.0218082,
+    "lon": 76.2799138
+  },
+  {
+    "name": "Kadavanthra",
+    "source": "Operation Breakthrough (TP Canal reach)",
+    "resolved_query": "Kadavanthra, Ernakulam, Kerala",
+    "lat": 9.9556752,
+    "lon": 76.3078342
+  },
+  {
+    "name": "Panampilly Nagar",
+    "source": "Operation Breakthrough (TP Canal reach)",
+    "resolved_query": "Panampilly Nagar, Ernakulam, Kerala",
+    "lat": 9.9555438,
+    "lon": 76.2965138
+  },
+  {
+    "name": "Vyttila",
+    "source": "press reporting, recurrent junction flooding",
+    "resolved_query": "Vyttila, Ernakulam, Kerala",
+    "lat": 9.9673396,
+    "lon": 76.3175261
+  },
+  {
+    "name": "Palarivattom",
+    "source": "press reporting, recurrent junction flooding",
+    "resolved_query": "Palarivattom, Ernakulam, Kerala",
+    "lat": 10.0025274,
+    "lon": 76.306206
+  }
+]

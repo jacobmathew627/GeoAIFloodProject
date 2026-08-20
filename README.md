@@ -123,6 +123,44 @@ that imposes a gradient toward the outlet — WhiteboxTools
 (`BreachDepressionsLeastCost`, `D8FlowAccumulation`) or RichDEM do this
 correctly. Hand-rolling it at this scale is the wrong use of effort.
 
+## Urban waterlogging: what has now been tested
+
+Both layers were scored at **14 locations documented in public reporting** as
+recurrent Kochi waterlogging points (Operation Breakthrough phase-4 works, the
+TP and Mullassery canal reaches, and press coverage of the 2024 monsoon),
+geocoded via Nominatim and sampled as the maximum within 150 m.
+
+| Layer | vs urban background | vs **elevation-matched** urban background |
+|---|---|---|
+| Flood probability | AUC 0.865 | **0.801** (95% CI 0.690–0.889) |
+| Waterlogging index | AUC 0.839 | **0.807** (95% CI 0.698–0.908) |
+
+Every documented hotspot is a low-lying central junction, so the second column
+is the one that counts: a model that only knew "low ground floods" would score
+well against unrestricted urban background and collapse against an
+elevation-matched one. **The skill survives**, and both intervals exclude 0.5.
+
+So the layers do **rank** documented waterlogging locations above comparable
+urban ground. That is a real, testable claim, and it is the strongest statement
+the free data supports.
+
+What it does **not** license:
+
+- **The probabilities remain wrong for waterlogging.** The flood layer ranks
+  hotspots well while assigning them ~0.16% absolute probability. AUC is
+  rank-based and blind to calibration. Use the ordering, never the number.
+- **n = 14.** The intervals are wide by construction, enough to separate
+  "skill" from "chance" and nothing finer.
+- **Reporting bias.** Journalists cover junctions that stall traffic, so the
+  sample favours arterial city-centre roads over residential streets that
+  flood as often. Some of the measured skill may be "near a canal or major
+  road" rather than "waterlogs".
+- **It is a test set, not a training set.** Nothing was fitted to it.
+
+Regenerate with `python src/waterlogging_validation.py`; every point carries
+its source in `models/waterlogging_validation.json` so any label can be
+audited or dropped.
+
 ## Read this first: what the model does and does not predict
 
 **It does not predict urban waterlogging.** It predicts the extent of
