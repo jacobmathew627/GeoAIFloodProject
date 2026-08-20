@@ -126,8 +126,10 @@ def build_flood_image(event: str, project: str):
 
 def acquire(event: str, project: str, scale: int = 30, out_dir: str = "GeoAI_New") -> str:
     """Download the flood mask for `event` as a GeoTIFF."""
+    import shutil
+    import urllib.request
+
     import ee
-    import geemap
 
     LOGGER.info("Initialising Earth Engine (project=%s)...", project)
     ee.Initialize(project=project)
@@ -159,10 +161,22 @@ def acquire(event: str, project: str, scale: int = 30, out_dir: str = "GeoAI_New
 
     path = f"{out_dir}/Flood_Extent_{event}.tif"
     LOGGER.info("  exporting to %s at %d m...", path, scale)
-    geemap.ee_export_image(
-        flood.unmask(0), filename=path, scale=scale, region=roi, file_per_band=False
-    )
-    LOGGER.info("  done. Re-run align_data.py to bring it onto the master grid.")
+
+    # getDownloadURL rather than geemap: one fewer heavy dependency, and the
+    # mask is well inside the 32 MB response limit (~2.7M pixels of uint8 over
+    # this district at 30 m).
+    url = flood.unmask(0).toByte().getDownloadURL({
+        "scale": scale,
+        "region": roi,
+        "format": "GEO_TIFF",
+        "crs": "EPSG:32643",
+    })
+    with urllib.request.urlopen(url, timeout=600) as response, open(path, "wb") as f:
+        shutil.copyfileobj(response, f)
+
+    size_mb = os.path.getsize(path) / 1e6
+    LOGGER.info("  wrote %s (%.1f MB)", path, size_mb)
+    LOGGER.info("  next: add it to align_data.py and re-run to bring it onto the master grid")
     return path
 
 

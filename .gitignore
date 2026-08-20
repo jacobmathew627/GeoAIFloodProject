@@ -65,3 +65,6 @@ GeoAI_New/Upstream_DEM.tif
 # IMD rainfall cache (regenerable via imdlib)
 data/imd_rain/
 models/rainfall_forecast.joblib
+
+# Acquired flood inventories (regenerable: src/acquire_flood_event.py)
+GeoAI_New/Flood_Extent_*.tif
