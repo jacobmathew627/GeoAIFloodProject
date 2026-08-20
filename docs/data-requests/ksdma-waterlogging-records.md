@@ -1,13 +1,20 @@
 # Data request: KSDMA waterlogging incident records
 
 **Why this matters more than any other request in this project.** The model
-predicts flood *inundation* well (spatial-block AUC 0.919) but cannot predict
+predicts flood *inundation* well (spatial-block AUC 0.824) but cannot predict
 urban *waterlogging*, because no free dataset records it. Of 14 locations
 documented in public reporting as recurrent Kochi waterlogging points, neither
 the Sentinel-1 inventory nor NDEM — the national disaster-management
 inventory, taken on the correct day — covers a single one. Satellites do not
 see 20 cm of water in a street between buildings. Incident records are the only
 source.
+
+Open data has since been tested a third way and narrowed the gap without
+closing it: OpenStreetMap supplies the district's drain, ditch and canal
+network, which turns out to be a real predictor — proximity to a mapped
+channel ranks 5th of 16 conditioning factors. But it predicts *where flooding
+is plausible*, not *where waterlogging was observed*. Only incident records do
+that.
 
 Fill in the bracketed fields before sending.
 

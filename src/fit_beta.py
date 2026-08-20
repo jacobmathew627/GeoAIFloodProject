@@ -133,7 +133,7 @@ def _load_surface(aligned_dir: Optional[Path] = None) -> Tuple[np.ndarray, np.nd
         ok &= s != nd
 
     lulc, lulc_valid = read_raster("lulc", aligned_dir=aligned_dir)
-    cn = curve_number_from_lulc(lulc)
+    cn = curve_number_from_lulc(lulc, lulc_valid)
 
     use = domain & ok & lulc_valid & np.isfinite(cn) & (cn > 0)
     if not use.any():

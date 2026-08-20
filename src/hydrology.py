@@ -41,6 +41,7 @@ def curve_number_from_lulc(
     lulc: np.ndarray,
     valid: np.ndarray,
     amc: Optional[str] = None,
+    hsg: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Build a curve number grid from the LULC classification.
@@ -50,16 +51,39 @@ def curve_number_from_lulc(
         valid: Boolean mask of pixels inside the study area.
         amc: Antecedent moisture condition, "I" | "II" | "III".
              Defaults to HYDRO.amc.
+        hsg: Optional hydrologic soil group raster, coded 1=A, 2=B, 3=C, 4=D
+             (see src/soil_hsg.py). When given, curve numbers come from
+             `HYDRO.curve_numbers_by_hsg` instead of the single-group table.
+             Pixels with no soil group fall back to the group-C column, which
+             is what the whole district used before soil data existed -- so a
+             partial soil raster degrades to the old behaviour rather than
+             punching holes in the curve number grid.
 
     Returns:
         Curve number array. Invalid pixels hold NaN.
     """
     amc = amc or HYDRO.amc
     cn = np.full(lulc.shape, np.nan, dtype=np.float32)
+    classes = np.round(lulc)
 
-    cn[valid] = HYDRO.default_curve_number
-    for cls, value in HYDRO.curve_numbers.items():
-        cn[valid & (np.round(lulc) == cls)] = value
+    if hsg is None:
+        cn[valid] = HYDRO.default_curve_number
+        for cls, value in HYDRO.curve_numbers.items():
+            cn[valid & (classes == cls)] = value
+        return adjust_cn_for_amc(cn, amc)
+
+    # Column index per pixel: 0=A, 1=B, 2=C, 3=D. Anything outside 1-4 (no
+    # soil data) becomes column 2, the group-C fallback.
+    codes = np.round(np.nan_to_num(hsg, nan=3.0)).astype(np.int16)
+    col = np.clip(codes - 1, 0, 3)
+    col = np.where((codes >= 1) & (codes <= 4), col, 2)
+
+    default_row = np.asarray(HYDRO.default_curve_numbers_by_hsg, dtype=np.float32)
+    cn[valid] = default_row[col[valid]]
+    for cls, row in HYDRO.curve_numbers_by_hsg.items():
+        m = valid & (classes == cls)
+        if m.any():
+            cn[m] = np.asarray(row, dtype=np.float32)[col[m]]
 
     return adjust_cn_for_amc(cn, amc)
 

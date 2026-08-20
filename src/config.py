@@ -168,6 +168,29 @@ class HydrologyConfig:
     })
     default_curve_number: float = 80.0
 
+    # Curve number by (LULC class, hydrologic soil group), used when
+    # `soil_hsg_aligned.tif` exists (see src/soil_hsg.py). The group-C column
+    # is *identical* to `curve_numbers` above, deliberately: anchoring on it
+    # means any change in output is attributable to the soil raster rather than
+    # to swapping in a different table. A and B columns follow the NEH-630
+    # Table 2-2 spread for the matching cover type, scaled to land on the
+    # existing C value.
+    #
+    # Runoff depth is strongly nonlinear in CN, so the A-to-D spread here is
+    # not a refinement -- on built-up land it is 75 against 90, which changes
+    # runoff at 100 mm by roughly a factor of two.
+    curve_numbers_by_hsg: dict = field(default_factory=lambda: {
+        #      A      B      C      D
+        1:  (100.0, 100.0, 100.0, 100.0),  # water: all rainfall runs off
+        2:  ( 30.0,  55.0,  70.0,  77.0),  # tree cover (woods, good condition)
+        4:  ( 80.0,  87.0,  90.0,  92.0),  # wetland / paddy (near-ponded)
+        5:  ( 62.0,  74.0,  80.0,  84.0),  # cropland / grass (row crops, good)
+        7:  ( 75.0,  83.0,  88.0,  90.0),  # built-up (~65% impervious)
+        8:  ( 76.0,  85.0,  89.0,  92.0),  # bare / sparse (fallow)
+        11: ( 39.0,  60.0,  74.0,  80.0),  # shrubland (brush, fair)
+    })
+    default_curve_numbers_by_hsg: tuple = (62.0, 74.0, 80.0, 84.0)
+
     # Initial abstraction ratio. The classic SCS value is 0.20; re-analysis of
     # the USDA rainfall-runoff database supports ~0.05, which is now widely
     # preferred. 0.05 requires S to be rescaled (S005 = 1.33 * S020^1.15).
@@ -361,7 +384,13 @@ SUSCEPTIBILITY_FEATURES = [
     "urban_dist",  # distance to built-up (m)
     "ndvi",        # vegetation
     "ndwi",        # surface water / moisture
-    "urban_mask",  # impervious fraction proxy
+    # `urban_mask` was here. Dropped: permutation importance came out at
+    # 0.000, -0.000 and -0.0001 on three consecutive retrains, meaning
+    # shuffling it does not hurt the model and on the last two it marginally
+    # helped. Its signal is fully absorbed by `urban_dist` and `curve_number`,
+    # both of which derive from the same LULC raster. The raster itself is
+    # still built and is still used by ndem_labels.py and
+    # waterlogging_validation.py to define the urban background.
     "curve_number",  # derived in hydrology.py from LULC
     # Context features (src/derive_features.py). Everything above describes
     # the pixel itself; these describe what surrounds it, which is what a

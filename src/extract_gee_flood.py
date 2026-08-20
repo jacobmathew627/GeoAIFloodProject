@@ -3,13 +3,39 @@ import os
 import rasterio
 from rasterio.transform import from_origin
 
+# No default project ID. The one previously hardcoded here
+# (empyrean-backup-387418) no longer exists, so every call failed with an
+# opaque permission error that read like an auth problem rather than a dead
+# project. Set EARTHENGINE_PROJECT (or EE_PROJECT) to a Cloud project that has
+# the Earth Engine API enabled and that your account can actually access.
+PROJECT_ENV_VARS = ("EARTHENGINE_PROJECT", "EE_PROJECT")
+
+
+def gee_project():
+    """Earth Engine Cloud project from the environment, or None."""
+    for var in PROJECT_ENV_VARS:
+        value = os.environ.get(var)
+        if value:
+            return value
+    return None
+
+
 def initialize_gee():
+    project = gee_project()
+    if not project:
+        print(
+            "No Earth Engine project set. Export one of "
+            f"{' or '.join(PROJECT_ENV_VARS)} first, e.g.\n"
+            "    set EARTHENGINE_PROJECT=my-ee-project"
+        )
+        return False
     try:
-        ee.Initialize(project='empyrean-backup-387418')
-        print("Google Earth Engine initialized successfully with project: empyrean-backup-387418")
+        ee.Initialize(project=project)
+        print(f"Google Earth Engine initialized with project: {project}")
     except Exception as e:
-        print(f"Error initializing GEE: {e}")
-        print("Please run 'python src/auth_gee.py' first.")
+        print(f"Error initializing GEE with project {project!r}: {e}")
+        print("Check the project exists, has the Earth Engine API enabled, and")
+        print("that your account can access it. Then run 'python src/auth_gee.py'.")
         return False
     return True
 

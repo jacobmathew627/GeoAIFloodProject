@@ -1,8 +1,19 @@
 import ee
-import geemap
 import os
 import rasterio
 import numpy as np
+
+# NOTE: this script takes a *median composite* over a date range, which is the
+# wrong reduction for flood mapping -- a median over 10-25 Aug 2018 averages
+# flooded and unflooded scenes together and washes the flood out. Use
+# src/acquire_flood_event.py instead, which does pre/post change detection on
+# individual acquisitions. This module is kept only because it documents how
+# the earliest SAR extraction was done.
+#
+# `geemap` is imported lazily below rather than at module scope. It is not a
+# project dependency, and importing it here made the whole module unimportable
+# with a bare ModuleNotFoundError -- which looked like a broken script rather
+# than a missing optional package.
 
 # CONFIGURATION
 # Using FAO/GAUL for precise Ernakulam district boundary
@@ -38,6 +49,8 @@ def extract_sar_sigma0(start_date, end_date, suffix):
         
         print(f"  Exporting {band} to {out_path}...")
         try:
+            import geemap  # optional dependency; see the note at the top
+
             geemap.ee_export_image(
                 band_image,
                 filename=out_path,
@@ -54,14 +67,24 @@ def authenticate_and_run():
     """
     Guides the user through GEE authentication and extracts 2018 data
     """
+    # No default project ID. The one previously hardcoded here
+    # (empyrean-backup-387418) no longer exists, and a dead project fails with
+    # a permission error that reads like an auth problem, sending you round the
+    # authentication loop instead of at the real cause.
+    project = os.environ.get("EARTHENGINE_PROJECT") or os.environ.get("EE_PROJECT")
+    if not project:
+        print(
+            "No Earth Engine project set. Export EARTHENGINE_PROJECT (or "
+            "EE_PROJECT) first, e.g.\n    set EARTHENGINE_PROJECT=my-ee-project"
+        )
+        return
     try:
-        print("Initializing Google Earth Engine...")
-        # Initializing with the user's project ID
-        ee.Initialize(project='empyrean-backup-387418')
+        print(f"Initializing Google Earth Engine with project {project}...")
+        ee.Initialize(project=project)
     except Exception as e:
-        print(f"Initialization error: {e}")
-        print("\nNote: If you have authenticated but still see this error, you might need to specify a Project ID.")
-        print("Example: ee.Initialize(project='your-project-id')")
+        print(f"Initialization error with project {project!r}: {e}")
+        print("\nCheck the project exists, has the Earth Engine API enabled, and")
+        print("that the authenticated account can access it.")
         return
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
