@@ -68,3 +68,6 @@ models/rainfall_forecast.joblib
 
 # Acquired flood inventories (regenerable: src/acquire_flood_event.py)
 GeoAI_New/Flood_Extent_*.tif
+
+# NDEM inventory cache (regenerable: src/ndem_labels.py)
+data/ndem/
