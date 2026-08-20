@@ -120,9 +120,20 @@ def permanent_water_mask(
 def flood_labels(
     window: Optional[Window] = None,
     aligned_dir: Optional[Path] = None,
+    raster: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Binary flood inventory (1 = observed flooded) and its valid mask."""
-    gt, valid = read_raster("ground_truth", window, aligned_dir)
+    """
+    Binary flood inventory (1 = observed flooded) and its valid mask.
+
+    The source raster is `config.FLOOD_LABEL_RASTER` unless overridden, so the
+    inventory can be swapped without touching the training code. See that
+    setting for why the default is the NDEM inventory rather than the single
+    Sentinel-1 scene the project started with.
+    """
+    from config import FLOOD_LABEL_RASTER
+
+    name = raster or FLOOD_LABEL_RASTER
+    gt, valid = read_raster(name, window, aligned_dir)
     return (gt > 0.5), valid
 
 

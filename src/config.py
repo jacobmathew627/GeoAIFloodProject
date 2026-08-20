@@ -188,17 +188,30 @@ class RiskThresholds:
     """
     Flood risk classification thresholds, on the calibrated probability scale.
 
-    These are NOT round numbers, and they should not be. They were read off
-    the precision-recall curve of the reference-event hazard map against the
-    2018 Sentinel-1 inventory, so each boundary has an operational meaning:
+    These are NOT round numbers, and they should not be. Each edge is an
+    operating point read off the precision-recall curve of the reference-event
+    hazard map against the flood inventory, so each has an operational
+    meaning. Re-derive with `python src/risk_thresholds.py` after any retrain;
+    they are properties of the fitted probabilities, not constants.
 
-        safe / moderate  0.022  captures 95% of the observed flood extent
-        moderate / high  0.070  captures 81%, precision 0.22
-        high / critical  0.133  the maximum-F1 point; captures 54%, precision 0.33
-        critical         0.271  precision 0.53 -- a coin-flip or better
+    Against the NDEM inventory at 443 mm (base rate 3.66%):
 
-    The district base rate is 1.4%, so even the lowest band is ~1.6x the
-    no-skill rate and the critical band is ~38x it.
+        band       threshold  precision  recall   lift over base rate
+        moderate      0.023      0.071    0.951         2x
+        high          0.050      0.121    0.801         3x
+        severe        0.134      0.256    0.363         7x
+        critical      0.297      0.508    0.042        14x
+
+    Precision is low in the lower bands because the target is rare: flagging
+    95% of the flood necessarily flags a lot of ground that stayed dry. The
+    critical band is the one to act on -- a flag there is right about half the
+    time, fourteen times the base rate -- but it catches only 4% of the
+    extent, so it identifies the worst places rather than all of them.
+
+    Previous values, against the Sentinel-1 inventory (base rate 1.4%), were
+    0.022 / 0.070 / 0.133 / 0.271. Before that they were 0.10 / 0.20 / 0.30 /
+    0.50, inherited from an uncalibrated score inflated ~11x, which classified
+    the 2018 catastrophe as "monitoring active".
 
     The previous values (0.10 / 0.20 / 0.30 / 0.50) were inherited from the
     uncalibrated score, which was inflated by roughly 11x. Carried onto the
@@ -208,10 +221,10 @@ class RiskThresholds:
     Re-derive with the precision-recall curve whenever the model is retrained;
     the thresholds are properties of the fitted probabilities, not constants.
     """
-    safe: float = 0.022
-    moderate: float = 0.070
-    high: float = 0.133
-    critical: float = 0.271
+    safe: float = 0.023
+    moderate: float = 0.050
+    high: float = 0.134
+    critical: float = 0.297
 
     # Alert triggers, as a fraction of the mapped district area. Calibrated so
     # that the reference event (400 mm, 0.65% of the district in the critical
@@ -235,10 +248,10 @@ class VisualizationConfig:
     # district flat green.
     flood_colors: list = field(default_factory=lambda: [
         (0.000, "#1a9850"),  # Safe
-        (0.022, "#91cf60"),  # Moderate (95% of observed flooding is above this)
-        (0.070, "#fee08b"),  # High
-        (0.133, "#fdae61"),  # Severe (max-F1 operating point)
-        (0.271, "#d73027"),  # Critical (precision 0.53)
+        (0.023, "#91cf60"),  # Moderate (captures 95% of the observed flood)
+        (0.050, "#fee08b"),  # High (captures 80%)
+        (0.134, "#fdae61"),  # Severe (max-F1 operating point)
+        (0.297, "#d73027"),  # Critical (precision 0.51, 14x base rate)
         (1.000, "#a50026"),  # Extreme
     ])
     
@@ -380,6 +393,29 @@ MODEL_FILES = {
 
 # Susceptibility model produced by src/susceptibility.py
 SUSCEPTIBILITY_MODEL = "susceptibility_model.joblib"
+
+# ──────────────────────────────────────────────
+# Flood label source
+# ──────────────────────────────────────────────
+# Which aligned raster supplies the training labels, without the
+# "_aligned.tif" suffix.
+#
+# "ndem_flood_2018" is the National Database of Emergency Management
+# inventory for 17-18 August 2018, built by src/ndem_labels.py. It replaced
+# "ground_truth" -- a single Sentinel-1 scene from 21 August 2018 -- because
+# Sentinel-1 revisits this area only every 12 days, and that acquisition
+# landed four to six days after the rainfall peak, once much of the water had
+# receded. Measured over the model domain:
+#
+#     ground_truth     (S1, 21 Aug)   31.3 km2 flooded,  2.0 km2 urban ( 6.3%)
+#     ndem_flood_2018  (17+18 Aug)    78.7 km2 flooded, 33.8 km2 urban (42.9%)
+#
+# Seventeen times the urban flood signal, on the days it actually flooded. The
+# two overlap by only 8.5 km2, so this is a different observation rather than a
+# refinement of the same one.
+#
+# Set back to "ground_truth" to reproduce the earlier model.
+FLOOD_LABEL_RASTER = "ndem_flood_2018"
 
 # ──────────────────────────────────────────────
 # Known Locations for Search

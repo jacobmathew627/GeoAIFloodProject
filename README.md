@@ -132,29 +132,51 @@ geocoded via Nominatim and sampled as the maximum within 150 m.
 
 | Layer | vs urban background | vs **elevation-matched** urban background |
 |---|---|---|
-| Flood probability | AUC 0.865 | **0.801** (95% CI 0.690–0.889) |
-| Waterlogging index | AUC 0.839 | **0.807** (95% CI 0.698–0.908) |
+| Flood probability | AUC 0.294 | **0.353** — worse than chance |
+| **Waterlogging index** | AUC 0.839 | **0.807** (95% CI 0.698–0.908) |
 
-Every documented hotspot is a low-lying central junction, so the second column
-is the one that counts: a model that only knew "low ground floods" would score
-well against unrestricted urban background and collapse against an
-elevation-matched one. **The skill survives**, and both intervals exclude 0.5.
+Only the **waterlogging index** has skill here, and it survives the
+elevation-matched control — the test that matters, since every documented
+hotspot is a low-lying junction and a model knowing only "low ground floods"
+would ace an unrestricted comparison and collapse against a matched one.
 
-So the layers do **rank** documented waterlogging locations above comparable
-urban ground. That is a real, testable claim, and it is the strongest statement
-the free data supports.
+### The flood layer is anti-correlated with waterlogging, and that is correct
 
-What it does **not** license:
+The flood probability layer scores **0.35** — documented hotspots rank *below*
+ordinary urban ground. That is not a defect. It is geography:
 
-- **The probabilities remain wrong for waterlogging.** The flood layer ranks
-  hotspots well while assigning them ~0.16% absolute probability. AUC is
-  rank-based and blind to calibration. Use the ordering, never the number.
+| | Mean column (of 7374, west→east) | Median elevation |
+|---|---|---|
+| Documented Kochi hotspots | **1176–1666** (far west) | ~8 m |
+| NDEM 2018 flood extent | **2849** (inland) | 13.9 m |
+
+**Kochi city did not experience riverine flooding in August 2018.** The flood
+was inland along the Periyar — Aluva, Perumbavoor, Kalamassery. **All 14
+hotspots fall outside the NDEM flood extent.** A model trained to predict that
+event therefore ranks the city centre as comparatively safe, which is right for
+riverine inundation and irrelevant to street ponding.
+
+The two phenomena are not merely different mechanisms. In this district they
+happen in **different places**. That is why the layers are kept separate and
+never blended: averaging them would have destroyed the only waterlogging
+signal the project has.
+
+Note this reverses an earlier result. Trained on the Sentinel-1 inventory the
+flood layer scored 0.801 here, which looked like waterlogging skill. That
+inventory was coastal-fringe-heavy (mean column 2373, median elevation 4.0 m)
+and so sat nearer the city by accident. The better-timed label removed the
+coincidence.
+
+What the surviving result does **not** license:
+
 - **n = 14.** The intervals are wide by construction, enough to separate
   "skill" from "chance" and nothing finer.
 - **Reporting bias.** Journalists cover junctions that stall traffic, so the
   sample favours arterial city-centre roads over residential streets that
   flood as often. Some of the measured skill may be "near a canal or major
   road" rather than "waterlogs".
+- **The index is not a probability.** It is a physics-derived 0–1 ranking with
+  no calibration, because there is nothing to calibrate it against.
 - **It is a test set, not a training set.** Nothing was fitted to it.
 
 Regenerate with `python src/waterlogging_validation.py`; every point carries
@@ -235,11 +257,32 @@ Held-out performance of the susceptibility model, from
 
 | Cross-validation scheme | AUC-ROC | AUC-PR | Brier |
 |---|---|---|---|
-| Random k-fold | 0.977 | 0.976 | 0.057 |
-| **Spatial block (5 km)** | **0.919** | **0.911** | **0.119** |
-| Spatial block, low-lying only (DEM ≤ 7 m) | 0.906 | 0.898 | 0.131 |
+| Random k-fold | 0.882 | 0.871 | 0.139 |
+| **Spatial block (5 km)** | **0.822** | **0.804** | **0.173** |
+| Spatial block, low-lying only (DEM ≤ 21.7 m) | 0.840 | 0.822 | 0.163 |
 
-Random k-fold **overstates AUC by 5.8 points** here. Neighbouring pixels of a
+### Why this is lower than the earlier 0.919, and why it is a better model
+
+The model previously trained on a single Sentinel-1 scene and scored 0.919.
+That number was almost entirely elevation:
+
+| Label | AUC from elevation **alone** | Full 15-feature model | Added by the other 14 |
+|---|---|---|---|
+| Sentinel-1, 21 Aug 2018 | **0.912** | 0.919 | **+0.007** |
+| NDEM, 17–18 Aug 2018 | **0.763** | 0.822 | **+0.059** |
+
+Fourteen conditioning factors were buying 0.007 of AUC over a single one. The
+Sentinel-1 inventory was 94% non-urban backwater fringe with a median elevation
+of 4.0 m, so "low ground is wet" solved it. The NDEM inventory is 43% urban at
+a median 13.9 m — much closer to the district as a whole (50% urban, 30.6 m) —
+and the model now contributes **eight times more** over that baseline.
+
+A lower headline AUC against a harder, better-timed, more representative label
+is the better model. Calibration improved too: the worst predicted-versus-
+observed gap fell from 0.033 to **0.020**, and expected flooded area at the
+reference event matches the observed extent exactly (78.7 km²).
+
+Random k-fold **overstates AUC by 6.0 points** here. Neighbouring pixels of a
 10 m raster are near-duplicates, so a random split leaks the test set into
 training. The spatial-block number is the one to quote. The low-lying row is
 the operationally relevant case: it measures whether the model can rank two

@@ -1,0 +1,39 @@
+{
+  "rainfall_mm": 443.0,
+  "base_rate": 0.03661366666666667,
+  "n_scored": 3000000,
+  "bands": {
+    "moderate": {
+      "threshold": 0.0227,
+      "precision": 0.071,
+      "recall": 0.951,
+      "f1": 0.133,
+      "lift_over_base_rate": 2.0,
+      "criterion": "recall=0.95"
+    },
+    "high": {
+      "threshold": 0.0504,
+      "precision": 0.121,
+      "recall": 0.801,
+      "f1": 0.211,
+      "lift_over_base_rate": 3.3,
+      "criterion": "recall=0.8"
+    },
+    "severe": {
+      "threshold": 0.1339,
+      "precision": 0.256,
+      "recall": 0.363,
+      "f1": 0.3,
+      "lift_over_base_rate": 7.0,
+      "criterion": "max_f1"
+    },
+    "critical": {
+      "threshold": 0.2975,
+      "precision": 0.508,
+      "recall": 0.042,
+      "f1": 0.078,
+      "lift_over_base_rate": 13.9,
+      "criterion": "precision=0.5"
+    }
+  }
+}
