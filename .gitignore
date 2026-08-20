@@ -71,3 +71,6 @@ GeoAI_New/Flood_Extent_*.tif
 
 # NDEM inventory cache (regenerable: src/ndem_labels.py)
 data/ndem/
+
+# OSM drainage cache (regenerable: python src/osm_drainage.py --build)
+data/osm/
