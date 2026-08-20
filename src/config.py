@@ -368,6 +368,15 @@ SUSCEPTIBILITY_FEATURES = [
     # pixel-independent model structurally cannot see.
     "upstream_cn",    # catchment-average curve number, routed on the D8 network
     "dem_rel_1km",    # elevation relative to the ~1 km neighbourhood mean
+    # Drainage network (src/osm_drainage.py, OpenStreetMap/ODbL). Whether water
+    # can get away is a first-order control and nothing above described it. The
+    # sign is deliberately left to the model: measured against the documented
+    # hotspots, proximity to a mapped channel goes with *more* waterlogging, not
+    # less (Kochi's canals are tidal and back up), so hand-coding the intuitive
+    # direction would be wrong -- and hand-coding the measured direction would
+    # fit the validation set. Fitted here on NDEM flood labels instead.
+    "osm_drain_dist",     # metres to the nearest mapped drain, ditch or canal
+    "osm_drain_density",  # km of mapped channel per km2, 1 km neighbourhood
 ]
 
 # Legacy PyTorch UNet channel orders, kept so the archived .pth models remain
