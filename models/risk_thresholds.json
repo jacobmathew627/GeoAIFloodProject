@@ -1,38 +1,38 @@
 {
   "rainfall_mm": 443.0,
-  "base_rate": 0.03661366666666667,
+  "base_rate": 0.036366,
   "n_scored": 3000000,
   "bands": {
     "moderate": {
-      "threshold": 0.0227,
-      "precision": 0.071,
-      "recall": 0.951,
-      "f1": 0.133,
-      "lift_over_base_rate": 2.0,
+      "threshold": 0.0236,
+      "precision": 0.078,
+      "recall": 0.954,
+      "f1": 0.144,
+      "lift_over_base_rate": 2.1,
       "criterion": "recall=0.95"
     },
     "high": {
-      "threshold": 0.0504,
-      "precision": 0.121,
-      "recall": 0.801,
-      "f1": 0.211,
-      "lift_over_base_rate": 3.3,
+      "threshold": 0.0559,
+      "precision": 0.134,
+      "recall": 0.814,
+      "f1": 0.231,
+      "lift_over_base_rate": 3.7,
       "criterion": "recall=0.8"
     },
     "severe": {
-      "threshold": 0.1339,
-      "precision": 0.256,
-      "recall": 0.363,
-      "f1": 0.3,
-      "lift_over_base_rate": 7.0,
+      "threshold": 0.1253,
+      "precision": 0.281,
+      "recall": 0.386,
+      "f1": 0.325,
+      "lift_over_base_rate": 7.7,
       "criterion": "max_f1"
     },
     "critical": {
-      "threshold": 0.2975,
-      "precision": 0.508,
-      "recall": 0.042,
-      "f1": 0.078,
-      "lift_over_base_rate": 13.9,
+      "threshold": 0.2685,
+      "precision": 0.539,
+      "recall": 0.041,
+      "f1": 0.076,
+      "lift_over_base_rate": 14.8,
       "criterion": "precision=0.5"
     }
   }

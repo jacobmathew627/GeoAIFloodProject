@@ -1,7 +1,8 @@
 {
-  "beta_fitted": 3.078,
-  "beta_assumed": 2.8,
+  "beta_fitted": 3.085,
+  "beta_assumed": 3.078,
   "reference_mm": 443.0,
+  "routed": true,
   "n_events": 4,
   "n_informative": 3,
   "per_event": [
@@ -18,15 +19,15 @@
       "rainfall_mm": 412.5,
       "observed_km2": 31.3,
       "predicted_km2_fitted": 59.5,
-      "predicted_km2_assumed": 60.8,
+      "predicted_km2_assumed": 59.6,
       "informative": true
     },
     {
       "event": "2020",
       "rainfall_mm": 305.5,
       "observed_km2": 11.1,
-      "predicted_km2_fitted": 21.9,
-      "predicted_km2_assumed": 24.6,
+      "predicted_km2_fitted": 22.0,
+      "predicted_km2_assumed": 22.0,
       "informative": true
     },
     {
@@ -34,28 +35,28 @@
       "rainfall_mm": 173.7,
       "observed_km2": 4.1,
       "predicted_km2_fitted": 3.0,
-      "predicted_km2_assumed": 3.9,
+      "predicted_km2_assumed": 3.0,
       "informative": true
     }
   ],
   "leave_one_out": [
     {
       "held_out": "2019",
-      "beta": 3.038,
+      "beta": 3.045,
       "predicted_km2": 59.7,
       "observed_km2": 31.3,
       "ratio": 1.91
     },
     {
       "held_out": "2020",
-      "beta": 2.815,
+      "beta": 2.822,
       "predicted_km2": 24.4,
       "observed_km2": 11.1,
       "ratio": 2.19
     },
     {
       "held_out": "2021",
-      "beta": 4.963,
+      "beta": 4.973,
       "predicted_km2": 0.6,
       "observed_km2": 4.1,
       "ratio": 0.14

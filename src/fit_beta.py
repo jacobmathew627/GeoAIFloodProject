@@ -109,8 +109,15 @@ def _observed_extents(
     return out
 
 
-def _load_surface(aligned_dir: Optional[Path] = None) -> Tuple[np.ndarray, np.ndarray]:
-    """Susceptibility and curve number over the model domain, as flat arrays."""
+def _load_surface(
+    aligned_dir: Optional[Path] = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Susceptibility and curve number over the model domain, as flat arrays,
+    plus the 2D boolean mask that produced them -- needed by
+    _load_routed_ratios() to flatten the routed basis (built as full grids)
+    the same way, so susceptibility[i] and ratio[i] refer to the same pixel.
+    """
     from feature_stack import domain_mask, read_raster
     from hydrology import curve_number_from_lulc
 
@@ -142,7 +149,64 @@ def _load_surface(aligned_dir: Optional[Path] = None) -> Tuple[np.ndarray, np.nd
             "written file reads as all-nodata; re-run --predict to completion"
         )
     LOGGER.info("  %d domain pixels with susceptibility and curve number", int(use.sum()))
-    return s[use], cn[use]
+    return s[use], cn[use], use
+
+
+def _load_routed_ratios(
+    events: Sequence[Dict],
+    use: np.ndarray,
+    reference_mm: float,
+    aligned_dir: Optional[Path] = None,
+) -> List[Dict]:
+    """
+    Attach a precomputed, flattened routed runoff ratio to each event dict.
+
+    Built once per rainfall depth present in `events`, not once per beta
+    trial -- the ratio does not depend on beta, so recomputing it inside the
+    ~20-30-call golden-section search would be pure waste. Distinct events at
+    the same rainfall depth (there are none currently, but nothing stops it)
+    share one ratio array rather than recomputing it twice.
+    """
+    from hazard import build_routed_basis
+    from pluvial import routed_runoff_ratio
+
+    basis, classes, cell_area_m2, valid_grid = build_routed_basis(aligned_dir)
+    basis_flat = {k: n_k[use] for k, n_k in basis.items()}
+    valid_flat = valid_grid[use]
+
+    ratio_by_depth: Dict[float, np.ndarray] = {}
+    out = []
+    for ev in events:
+        depth = ev["rainfall_mm"]
+        if depth not in ratio_by_depth:
+            ratio_by_depth[depth] = routed_runoff_ratio(
+                basis_flat, classes, depth, reference_mm, cell_area_m2, valid_flat,
+            )
+        out.append({**ev, "ratio": ratio_by_depth[depth]})
+    return out
+
+
+def expected_area_km2_from_ratio(
+    susceptibility: np.ndarray,
+    ratio: np.ndarray,
+    beta: float,
+) -> float:
+    """
+    Expected flooded area under the hazard model, given a precomputed runoff
+    ratio Q(x, P) / Q(x, P_ref).
+
+    The shared core behind expected_area_km2() (pointwise) and the routed
+    fit in run() (pluvial.routed_runoff_ratio()) -- one sigmoid/logit
+    implementation rather than two copies that could drift apart. Summing
+    probabilities rather than thresholding them keeps this independent of the
+    risk-band cuts, which were derived separately.
+    """
+    ratio = np.clip(ratio, MIN_RUNOFF_RATIO, None)
+    logit_s = np.log(susceptibility / (1.0 - susceptibility))
+    hazard = 1.0 / (1.0 + np.exp(-(logit_s + beta * np.log(ratio))))
+
+    px_km2 = (RASTER.cell_size / 1000.0) ** 2
+    return float(np.nansum(hazard)) * px_km2
 
 
 def expected_area_km2(
@@ -153,10 +217,12 @@ def expected_area_km2(
     reference_mm: Optional[float] = None,
 ) -> float:
     """
-    Expected flooded area under the hazard model, in km2.
+    Expected flooded area under the pointwise hazard model, in km2.
 
-    Summing probabilities rather than thresholding them keeps this independent
-    of the risk-band cuts, which were derived separately.
+    Kept for the pointwise case specifically -- fit_beta.py's default path is
+    now routed (see run()), but this pointwise form is still what
+    hazard.combine() falls back to when no routed ratio is supplied, and it
+    is what tests/test_fit_beta.py exercises directly.
     """
     from hydrology import runoff_depth
 
@@ -166,13 +232,8 @@ def expected_area_km2(
     q_ref = runoff_depth(reference_mm, curve_number)
     with np.errstate(divide="ignore", invalid="ignore"):
         ratio = np.where(q_ref > 0, q_now / q_ref, np.nan)
-    ratio = np.clip(ratio, MIN_RUNOFF_RATIO, None)
 
-    logit_s = np.log(susceptibility / (1.0 - susceptibility))
-    hazard = 1.0 / (1.0 + np.exp(-(logit_s + beta * np.log(ratio))))
-
-    px_km2 = (RASTER.cell_size / 1000.0) ** 2
-    return float(np.nansum(hazard)) * px_km2
+    return expected_area_km2_from_ratio(susceptibility, ratio, beta)
 
 
 def _loss(
@@ -185,11 +246,22 @@ def _loss(
 
     Log space because the extents span 4.1 to 78.7 km2; in linear space the
     biggest event would set beta on its own.
+
+    Each event uses its precomputed routed ratio (ev["ratio"]) when present
+    -- attached once by _load_routed_ratios() before the search starts, since
+    the ratio does not depend on beta and recomputing it on every one of the
+    ~20-30 evaluations a golden-section search makes would be pure waste.
+    Events without a "ratio" key (the tests in tests/test_fit_beta.py, which
+    predate routing) fall back to the original pointwise computation from
+    curve_number, so nothing that already passes is disturbed.
     """
     s, cn = surface
     err = 0.0
     for ev in events:
-        pred = expected_area_km2(s, cn, ev["rainfall_mm"], beta)
+        if "ratio" in ev:
+            pred = expected_area_km2_from_ratio(s, ev["ratio"], beta)
+        else:
+            pred = expected_area_km2(s, cn, ev["rainfall_mm"], beta)
         err += (np.log(max(pred, 1e-6)) - np.log(max(ev["observed_km2"], 1e-6))) ** 2
     return err / len(events)
 
@@ -229,8 +301,17 @@ def fit(
 def run(
     events: Optional[Sequence[str]] = None,
     aligned_dir: Optional[Path] = None,
+    routed: bool = True,
 ) -> Dict:
-    """Fit beta, report per-event fit and leave-one-out spread."""
+    """
+    Fit beta, report per-event fit and leave-one-out spread.
+
+    routed: fit against pluvial.routed_runoff_ratio() (catchment-aware, the
+        default -- matches hazard.combine()'s default) rather than the
+        pointwise ratio. Fitting against one and running hazard.py with the
+        other would silently calibrate beta to a question combine() is no
+        longer asking, so the two defaults are kept in lockstep on purpose.
+    """
     LOGGER.info("Observed extents from the NDEM inventory:")
     obs = _observed_extents(events, aligned_dir)
     for ev in obs:
@@ -239,9 +320,14 @@ def run(
         )
 
     LOGGER.info("Loading susceptibility surface...")
-    surface = _load_surface(aligned_dir)
+    s, cn, use = _load_surface(aligned_dir)
+    surface = (s, cn)
 
     ref = RAINFALL.reference_event_mm
+    if routed:
+        LOGGER.info("Building the routed runoff basis (catchment-aware fit)...")
+        obs = _load_routed_ratios(obs, use, ref, aligned_dir)
+
     informative = [e for e in obs if abs(e["rainfall_mm"] - ref) > 1.0]
     LOGGER.info(
         "Reference event %.1f mm carries no information about beta; "
@@ -257,14 +343,18 @@ def run(
     beta = fit(surface, informative)
     LOGGER.info("Fitted beta = %.3f  (was %.3f, assumed)", beta, HYDRO.runoff_logit_beta)
 
+    def _predict(ev: Dict, b: float) -> float:
+        if "ratio" in ev:
+            return expected_area_km2_from_ratio(s, ev["ratio"], b)
+        return expected_area_km2(s, cn, ev["rainfall_mm"], b)
+
     LOGGER.info("")
     LOGGER.info("%-8s %10s %12s %12s %12s", "event", "rain mm", "observed", "fitted", "assumed")
     LOGGER.info("-" * 58)
     per_event = []
-    s, cn = surface
     for ev in obs:
-        pred = expected_area_km2(s, cn, ev["rainfall_mm"], beta)
-        old = expected_area_km2(s, cn, ev["rainfall_mm"], HYDRO.runoff_logit_beta)
+        pred = _predict(ev, beta)
+        old = _predict(ev, HYDRO.runoff_logit_beta)
         marker = "" if ev in informative else "  (reference, fixed by construction)"
         LOGGER.info(
             "%-8s %10.1f %9.1f km2 %8.1f km2 %8.1f km2%s",
@@ -288,7 +378,7 @@ def run(
         for held in informative:
             rest = [e for e in informative if e is not held]
             b_loo = fit(surface, rest)
-            pred = expected_area_km2(s, cn, held["rainfall_mm"], b_loo)
+            pred = _predict(held, b_loo)
             LOGGER.info(
                 "  hold out %s: beta=%.3f -> %.1f km2 vs %.1f observed (x%.2f)",
                 held["event"], b_loo, pred, held["observed_km2"],
@@ -314,6 +404,7 @@ def run(
         "beta_fitted": round(beta, 3),
         "beta_assumed": HYDRO.runoff_logit_beta,
         "reference_mm": ref,
+        "routed": routed,
         "n_events": len(obs),
         "n_informative": len(informative),
         "per_event": per_event,
@@ -337,10 +428,16 @@ def run(
 def main() -> None:  # pragma: no cover
     parser = argparse.ArgumentParser(description="Fit the rainfall sensitivity beta")
     parser.add_argument("--events", nargs="*", default=None)
+    parser.add_argument(
+        "--pointwise", action="store_true",
+        help="Fit against the pointwise ratio instead of the routed one. "
+             "hazard.combine() defaults to routed, so this is for an explicit "
+             "before/after comparison, not normal use.",
+    )
     args = parser.parse_args()
 
     setup_logging(logging.INFO)
-    run(events=args.events)
+    run(events=args.events, routed=not args.pointwise)
 
 
 if __name__ == "__main__":  # pragma: no cover

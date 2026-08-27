@@ -224,9 +224,109 @@ def class_runoff_depths(rainfall_mm: float, classes: np.ndarray) -> Dict[int, fl
     return out
 
 
+def routed_runoff_volume_m3(
+    basis: Dict[int, np.ndarray],
+    classes: np.ndarray,
+    rainfall_mm: float,
+    cell_area_m2: float,
+    valid: np.ndarray,
+) -> np.ndarray:
+    """
+    Runoff volume draining through each cell, in cubic metres.
+
+    A free function rather than a PluvialModel method so it has exactly one
+    implementation shared by three consumers that must stay physically
+    consistent with each other: PluvialModel's own wetness index, hazard.py's
+    routed fluvial hazard, and live_model.py's live slider. Divergent copies
+    of this arithmetic would let the three drift into answering slightly
+    different questions without anyone noticing.
+    """
+    q = class_runoff_depths(rainfall_mm, classes)
+    total = np.zeros(valid.shape, dtype=np.float32)
+    for k, n_k in basis.items():
+        depth_mm = q.get(int(k), 0.0)
+        if depth_mm > 0:
+            total += np.float32(depth_mm) * np.nan_to_num(n_k, nan=0.0)
+    # depth (mm) x upstream cell count -> volume
+    volume = total / 1000.0 * cell_area_m2
+    return np.where(valid, volume, np.nan)
+
+
+#: Floor on the routed runoff ratio, matching hazard._MIN_RUNOFF_RATIO. A
+#: catchment with zero contribution at the reference event (e.g. entirely
+#: impervious classes producing exactly zero runoff, which SCS-CN can do
+#: below the initial abstraction) would otherwise send ln(ratio) to +-inf.
+_MIN_ROUTED_RATIO = 1e-4
+
+
+def routed_runoff_ratio(
+    basis: Dict[int, np.ndarray],
+    classes: np.ndarray,
+    rainfall_mm: float,
+    reference_mm: float,
+    cell_area_m2: float,
+    valid: np.ndarray,
+) -> np.ndarray:
+    """
+    Ratio of routed runoff volume at `rainfall_mm` to the reference event.
+
+    This is what makes the fluvial hazard's rainfall response catchment-aware
+    instead of pointwise: hazard.combine() previously computed Q(x, P) from
+    x's own curve number alone, so a pixel's forcing was the rain that fell
+    on it and nothing its catchment delivered. Substituting this ratio for
+    the pointwise one accumulates rainfall-dependent runoff downslope through
+    the same D8 network already used for the pluvial wetness index, so a
+    pixel low in a large impervious catchment now responds to more than its
+    own footprint of rain.
+
+    Same floor-then-clip pattern as hazard.combine's pointwise ratio, and
+    for the same reason: ln(0) is -inf, and a catchment producing exactly
+    zero routed runoff at the reference event must not blow up the hazard's
+    logit shift.
+    """
+    now = routed_runoff_volume_m3(basis, classes, rainfall_mm, cell_area_m2, valid)
+    ref = routed_runoff_volume_m3(basis, classes, reference_mm, cell_area_m2, valid)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(ref > 0, now / ref, np.nan)
+    return np.clip(ratio, _MIN_ROUTED_RATIO, None)
+
+
 # ──────────────────────────────────────────────
 # The model
 # ──────────────────────────────────────────────
+def reproject_basis_to_grid(
+    basis: Dict[int, np.ndarray],
+    src_profile: dict,
+    dst_transform,
+    dst_crs,
+    dst_shape: Tuple[int, int],
+) -> Dict[int, np.ndarray]:
+    """
+    Resample a per-class upstream-count basis onto a different grid.
+
+    Shared by live_model.py (routing grid -> display grid) and hazard.py
+    (routing grid -> master grid) so both reproject the same routing output
+    the same way rather than keeping two copies of this loop. Average
+    resampling, not nearest: an upstream *count* should conserve total
+    contribution under resampling the way a density does, not snap to
+    whichever source cell happens to land nearest each destination cell.
+    """
+    from rasterio.enums import Resampling
+    from rasterio.warp import reproject
+
+    out = {}
+    for k, n_k in basis.items():
+        dst = np.full(dst_shape, np.nan, dtype=np.float32)
+        reproject(
+            source=np.nan_to_num(n_k, nan=0.0).astype(np.float32), destination=dst,
+            src_transform=src_profile["transform"], src_crs=src_profile["crs"],
+            dst_transform=dst_transform, dst_crs=dst_crs,
+            resampling=Resampling.average, src_nodata=np.nan, dst_nodata=np.nan,
+        )
+        out[int(k)] = np.nan_to_num(dst, nan=0.0)
+    return out
+
+
 class PluvialModel:
     """
     Rainfall-driven wetness, evaluated in milliseconds for any storm depth.
@@ -306,15 +406,9 @@ class PluvialModel:
     # -- evaluation --------------------------------------------------------
     def routed_runoff_m3(self, rainfall_mm: float) -> np.ndarray:
         """Runoff volume draining through each cell, in cubic metres."""
-        q = class_runoff_depths(rainfall_mm, self.classes)
-        total = np.zeros(self.tan_slope.shape, dtype=np.float32)
-        for k, n_k in self.basis.items():
-            depth_mm = q.get(int(k), 0.0)
-            if depth_mm > 0:
-                total += np.float32(depth_mm) * np.nan_to_num(n_k, nan=0.0)
-        # depth (mm) x upstream cell count -> volume
-        volume = total / 1000.0 * self.cell_area_m2
-        return np.where(self.valid, volume, np.nan)
+        return routed_runoff_volume_m3(
+            self.basis, self.classes, rainfall_mm, self.cell_area_m2, self.valid,
+        )
 
     def dynamic_wetness(self, rainfall_mm: float) -> np.ndarray:
         """

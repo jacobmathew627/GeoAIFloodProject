@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from config import RAINFALL, RASTER
-from fit_beta import BETA_BOUNDS, expected_area_km2, fit
+from fit_beta import BETA_BOUNDS, _loss, expected_area_km2, expected_area_km2_from_ratio, fit
 
 
 @pytest.fixture
@@ -139,3 +139,71 @@ class TestFit:
             expected_area_km2(s, cn, 173.7, 1.0) - expected_area_km2(s, cn, 173.7, 4.0)
         )
         assert spread_far > spread_near
+
+
+class TestExpectedAreaFromRatio:
+    """
+    expected_area_km2_from_ratio is the shared core behind both
+    expected_area_km2 (pointwise) and run()'s routed fit. Since
+    expected_area_km2 now delegates to it, these also indirectly cover that
+    delegation stayed correct.
+    """
+
+    def test_pointwise_delegates_to_from_ratio_identically(self, surface):
+        """expected_area_km2's own pointwise ratio, fed through
+        expected_area_km2_from_ratio by hand, must match its own result --
+        otherwise the delegation introduced a discrepancy."""
+        from hydrology import runoff_depth
+
+        s, cn = surface
+        ref = RAINFALL.reference_event_mm
+        q_now = runoff_depth(150.0, cn)
+        q_ref = runoff_depth(ref, cn)
+        ratio = np.where(q_ref > 0, q_now / q_ref, np.nan)
+        by_hand = expected_area_km2_from_ratio(s, ratio, 2.0)
+        via_wrapper = expected_area_km2(s, cn, 150.0, 2.0)
+        assert by_hand == pytest.approx(via_wrapper, rel=1e-9)
+
+    def test_ratio_of_one_reproduces_summed_susceptibility(self, surface):
+        s, _ = surface
+        px_km2 = (RASTER.cell_size / 1000.0) ** 2
+        got = expected_area_km2_from_ratio(s, np.ones_like(s), 3.0)
+        assert got == pytest.approx(float(s.sum()) * px_km2, rel=1e-9)
+
+    def test_beta_independent_at_ratio_one(self, surface):
+        s, _ = surface
+        areas = [expected_area_km2_from_ratio(s, np.ones_like(s), b) for b in (0.0, 2.5, 8.0)]
+        assert areas[0] == pytest.approx(areas[1], rel=1e-9)
+        assert areas[1] == pytest.approx(areas[2], rel=1e-9)
+
+
+class TestLossUsesPrecomputedRatioWhenPresent:
+    """
+    run() attaches a "ratio" array to each event before fitting so the routed
+    ratio is computed once per event, not once per beta trial. _loss() must
+    actually use it when present, and must not silently ignore it in favour
+    of recomputing from curve_number.
+    """
+
+    def test_precomputed_ratio_is_used_over_curve_number(self, surface):
+        s, cn = surface
+        # A ratio engineered to be very different from whatever the pointwise
+        # curve-number computation would give at this rainfall.
+        events_with_ratio = [{
+            "rainfall_mm": 200.0, "observed_km2": 1.0,
+            "ratio": np.full_like(s, 50.0),
+        }]
+        events_pointwise = [{"rainfall_mm": 200.0, "observed_km2": 1.0}]
+        loss_ratio = _loss(2.0, (s, cn), events_with_ratio)
+        loss_pointwise = _loss(2.0, (s, cn), events_pointwise)
+        assert loss_ratio != pytest.approx(loss_pointwise)
+
+    def test_events_without_ratio_still_use_the_pointwise_fallback(self, surface):
+        """Backward compatibility: every existing test in this file passes
+        events with no "ratio" key and must keep working unchanged."""
+        s, cn = surface
+        events = [{"rainfall_mm": 173.7, "observed_km2": 4.1}]
+        loss = _loss(2.0, (s, cn), events)
+        pred = expected_area_km2(s, cn, 173.7, 2.0)
+        expected_loss = (np.log(max(pred, 1e-6)) - np.log(4.1)) ** 2
+        assert loss == pytest.approx(expected_loss, rel=1e-9)

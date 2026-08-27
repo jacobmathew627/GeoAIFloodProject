@@ -92,7 +92,6 @@ def build(max_dim: int = 1000, aligned_dir: Optional[Path] = None) -> LiveGrid:
     """Precompute the rainfall-independent layers on the display grid."""
     import rasterio
     from rasterio.enums import Resampling
-    from rasterio.warp import reproject
 
     from hydrology import adjust_cn_for_amc
     from pluvial import PluvialModel
@@ -148,18 +147,10 @@ def build(max_dim: int = 1000, aligned_dir: Optional[Path] = None) -> LiveGrid:
 
     # -- routed runoff basis, accumulated at 30 m then brought to the display grid --
     LOGGER.info("Building the routed runoff basis...")
-    pm = PluvialModel.build(aligned_dir=aligned_dir)
+    from pluvial import reproject_basis_to_grid
 
-    basis = {}
-    for k, n_k in pm.basis.items():
-        dst = np.full(shape, np.nan, dtype=np.float32)
-        reproject(
-            source=np.nan_to_num(n_k, nan=0.0).astype(np.float32), destination=dst,
-            src_transform=pm.profile["transform"], src_crs=pm.profile["crs"],
-            dst_transform=transform, dst_crs=crs,
-            resampling=Resampling.average, src_nodata=np.nan, dst_nodata=np.nan,
-        )
-        basis[int(k)] = np.nan_to_num(dst, nan=0.0)
+    pm = PluvialModel.build(aligned_dir=aligned_dir)
+    basis = reproject_basis_to_grid(pm.basis, pm.profile, transform, crs, shape)
 
     px_w = abs(transform.a)
     grid = LiveGrid(
@@ -262,12 +253,20 @@ def fluvial_probability(grid: LiveGrid, rainfall_mm: float) -> np.ndarray:
     """
     Calibrated probability of riverine/backwater inundation at this rainfall.
 
-    Identical formulation to hazard.combine, evaluated live on the display
-    grid instead of being read from a pre-rendered raster.
+    Identical formulation to hazard.combine's routed path -- same
+    pluvial.routed_runoff_ratio() call, same basis grid.basis already
+    computed for the pluvial index, so the live slider and the batch-
+    generated hazard rasters answer the same question instead of drifting
+    into two different formulas that happen to share a name.
     """
     from hazard import combine
+    from pluvial import routed_runoff_ratio
 
-    return combine(grid.susceptibility, grid.curve_number, float(rainfall_mm))
+    ratio = routed_runoff_ratio(
+        grid.basis, grid.classes, float(rainfall_mm), RAINFALL.reference_event_mm,
+        grid.cell_area_m2, np.isfinite(grid.susceptibility),
+    )
+    return combine(grid.susceptibility, grid.curve_number, float(rainfall_mm), runoff_ratio=ratio)
 
 
 def _pluvial_raw(grid: LiveGrid, rainfall_mm: float) -> np.ndarray:

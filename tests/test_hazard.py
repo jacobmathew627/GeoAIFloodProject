@@ -102,6 +102,66 @@ class TestCombine:
         assert (combine(flat, forest, 0.0) < 1e-3).all()
 
 
+class TestCombineWithRoutedRatio:
+    """
+    combine()'s runoff_ratio parameter is what lets hazard.py, live_model.py
+    and fit_beta.py all feed in pluvial.routed_runoff_ratio() instead of the
+    pointwise ratio computed from curve_number -- the actual "route the
+    runoff" change. curve_number is still required even in this path, since
+    it also defines the model domain, so every test still passes it.
+    """
+
+    def test_explicit_ratio_of_one_reduces_to_susceptibility(
+        self, susceptibility, curve_number_grid
+    ):
+        """The routed path must satisfy the same reference-event identity as
+        the pointwise one: ratio == 1 everywhere gives hazard == susceptibility,
+        regardless of what rainfall_mm or curve_number say."""
+        ratio = np.ones_like(susceptibility)
+        hazard = combine(susceptibility, curve_number_grid, 999.0, runoff_ratio=ratio)
+        both = np.isfinite(hazard) & np.isfinite(susceptibility)
+        np.testing.assert_allclose(hazard[both], susceptibility[both], atol=1e-5)
+
+    def test_explicit_ratio_overrides_the_pointwise_one(
+        self, susceptibility, curve_number_grid
+    ):
+        """A routed ratio that differs from the pointwise one at this
+        rainfall must actually change the result -- otherwise the parameter
+        is being silently ignored."""
+        pointwise = combine(susceptibility, curve_number_grid, 200.0)
+        routed = combine(
+            susceptibility, curve_number_grid, 200.0,
+            runoff_ratio=np.full_like(susceptibility, 5.0),
+        )
+        both = np.isfinite(pointwise) & np.isfinite(routed)
+        assert not np.allclose(pointwise[both], routed[both])
+
+    def test_routed_ratio_still_stays_a_probability(
+        self, susceptibility, curve_number_grid
+    ):
+        ratio = np.full_like(susceptibility, 50.0)  # a large, catchment-inflated ratio
+        hazard = combine(susceptibility, curve_number_grid, 300.0, runoff_ratio=ratio)
+        finite = hazard[np.isfinite(hazard)]
+        assert (finite >= 0.0).all() and (finite <= 1.0).all()
+
+    def test_routed_ratio_respects_nodata_the_same_way(
+        self, susceptibility, curve_number_grid
+    ):
+        ratio = np.full_like(susceptibility, 2.0)
+        hazard = combine(susceptibility, curve_number_grid, 200.0, runoff_ratio=ratio)
+        assert np.isnan(hazard[2, 0])  # NaN susceptibility, same pixel as the other test
+
+    def test_nan_in_the_routed_ratio_propagates_to_nan_hazard(
+        self, susceptibility, curve_number_grid
+    ):
+        """A reprojection edge effect that leaves a hole in the routed ratio
+        must not silently read as zero hazard -- it must stay unknown."""
+        ratio = np.full_like(susceptibility, 2.0)
+        ratio[0, 0] = np.nan
+        hazard = combine(susceptibility, curve_number_grid, 200.0, runoff_ratio=ratio)
+        assert np.isnan(hazard[0, 0])
+
+
 class TestBlendScenarios:
     @pytest.fixture
     def scenarios(self):

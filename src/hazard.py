@@ -76,31 +76,43 @@ def combine(
     rainfall_mm: float,
     reference_mm: Optional[float] = None,
     beta: Optional[float] = None,
+    runoff_ratio: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Rainfall-conditioned flood hazard.
 
     Args:
         susceptibility: S(x) in [0, 1]; NaN outside the model domain.
-        curve_number: CN grid from hydrology.curve_number_from_lulc.
+        curve_number: CN grid from hydrology.curve_number_from_lulc. Still
+            required even when `runoff_ratio` is given, because it also
+            defines which pixels are inside the model domain.
         rainfall_mm: Storm depth to evaluate.
         reference_mm: Calibration event depth (default RAINFALL.reference_event_mm).
         beta: Logit sensitivity to runoff (default HYDRO.runoff_logit_beta).
+        runoff_ratio: Precomputed Q(x, P) / Q(x, P_ref), typically from
+            pluvial.routed_runoff_ratio(). When given, this replaces the
+            pointwise ratio computed from `curve_number` below -- a pixel's
+            forcing then includes what its catchment delivers, not just the
+            rain that fell on it. When omitted, falls back to the original
+            pointwise behaviour (a pixel's own curve number only), which is
+            what every test in tests/test_hazard.py exercises.
 
     Returns:
         Hazard probability array; NaN where susceptibility is NaN.
     """
-    from hydrology import runoff_depth
-
     reference_mm = reference_mm if reference_mm is not None else RAINFALL.reference_event_mm
     beta = beta if beta is not None else HYDRO.runoff_logit_beta
 
-    q_now = runoff_depth(rainfall_mm, curve_number)
-    q_ref = runoff_depth(reference_mm, curve_number)
+    if runoff_ratio is not None:
+        ratio = np.clip(runoff_ratio, _MIN_RUNOFF_RATIO, None)
+    else:
+        from hydrology import runoff_depth
 
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ratio = np.where(q_ref > 0, q_now / q_ref, np.nan)
-    ratio = np.clip(ratio, _MIN_RUNOFF_RATIO, None)
+        q_now = runoff_depth(rainfall_mm, curve_number)
+        q_ref = runoff_depth(reference_mm, curve_number)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = np.where(q_ref > 0, q_now / q_ref, np.nan)
+        ratio = np.clip(ratio, _MIN_RUNOFF_RATIO, None)
 
     shift = beta * np.log(ratio)
     hazard = sigmoid(logit(susceptibility) + shift)
@@ -112,6 +124,37 @@ def combine(
 
 
 # ──────────────────────────────────────────────
+# Routed runoff basis
+# ──────────────────────────────────────────────
+def build_routed_basis(aligned_dir: Optional[Path] = None):
+    """
+    The rainfall-independent routing basis, reprojected onto the master grid.
+
+    Reuses pluvial.PluvialModel's routing (built once, at the ~30 m routing
+    grid resolution) rather than re-implementing D8 accumulation at 10 m,
+    which would be a much larger computation for the same answer -- the flow
+    directions do not change with resolution, only how finely the result is
+    resampled afterward. Returns (basis, classes, cell_area_m2, valid), all
+    on the master grid, ready for pluvial.routed_runoff_ratio().
+    """
+    from pluvial import PluvialModel, reproject_basis_to_grid
+    from feature_stack import grid_profile, read_raster
+
+    master = grid_profile(aligned_dir)
+    shape = (master["height"], master["width"])
+
+    LOGGER.info("Building the routed runoff basis for the fluvial hazard...")
+    pm = PluvialModel.build(aligned_dir=aligned_dir)
+    basis = reproject_basis_to_grid(
+        pm.basis, pm.profile, master["transform"], master["crs"], shape,
+    )
+
+    _, district = read_raster("lulc", aligned_dir=aligned_dir)
+    cell_area_m2 = abs(master["transform"].a * master["transform"].e)
+    return basis, pm.classes, cell_area_m2, district
+
+
+# ──────────────────────────────────────────────
 # Raster generation
 # ──────────────────────────────────────────────
 def generate_hazard_rasters(
@@ -119,8 +162,16 @@ def generate_hazard_rasters(
     susceptibility_path: Optional[Path] = None,
     output_dir: Optional[Path] = None,
     aligned_dir: Optional[Path] = None,
+    routed: bool = True,
 ) -> Dict[float, Path]:
-    """Write one hazard raster per rainfall scenario."""
+    """
+    Write one hazard raster per rainfall scenario.
+
+    routed: use pluvial.routed_runoff_ratio() (catchment-aware, the default)
+        rather than the pointwise per-pixel ratio. Set False to reproduce the
+        original pointwise behaviour -- useful for an explicit before/after
+        comparison, not something the pipeline should normally need.
+    """
     import rasterio
 
     from feature_stack import compute_curve_number, grid_profile
@@ -155,9 +206,30 @@ def generate_hazard_rasters(
     cn, _ = compute_curve_number(aligned_dir=aligned_dir)
     profile = grid_profile(aligned_dir)
 
+    # Named distinctly from the `valid` used below for per-scenario stats
+    # logging -- reusing that name here cost a real bug: the district mask
+    # got silently overwritten by the flattened-hazard stats array at the end
+    # of the first loop iteration, so every scenario after the first computed
+    # a routed ratio against a mask that was no longer a 2D district mask at
+    # all. Caught immediately because the shapes stopped matching and the
+    # second scenario crashed rather than silently producing a wrong raster.
+    routing_basis = routing_classes = routing_cell_area_m2 = district_mask = None
+    if routed:
+        routing_basis, routing_classes, routing_cell_area_m2, district_mask = (
+            build_routed_basis(aligned_dir)
+        )
+
     written = {}
     for mm in scenarios:
-        hazard = combine(susc, cn, float(mm))
+        ratio = None
+        if routed:
+            from pluvial import routed_runoff_ratio
+
+            ratio = routed_runoff_ratio(
+                routing_basis, routing_classes, float(mm), RAINFALL.reference_event_mm,
+                routing_cell_area_m2, district_mask,
+            )
+        hazard = combine(susc, cn, float(mm), runoff_ratio=ratio)
         out = np.where(np.isfinite(hazard), hazard, NODATA).astype(np.float32)
 
         path = output_dir / f"flood_hazard_{int(mm)}mm.tif"

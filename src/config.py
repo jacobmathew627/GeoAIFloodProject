@@ -201,9 +201,9 @@ class HydrologyConfig:
     amc: str = "III"  # "I" (dry), "II" (average), "III" (wet)
 
     # Sensitivity of flood odds to runoff, in logit units per natural-log unit
-    # of the runoff ratio Q(P) / Q(P_reference). beta = 2.8 means halving the
-    # runoff depth relative to the reference storm multiplies the flood odds by
-    # exp(-3.078 * ln 2) = 0.12. See hazard.combine.
+    # of the runoff ratio Q(P) / Q(P_reference). beta = 3.085 means halving
+    # the runoff ratio multiplies the flood odds by exp(-3.085 * ln 2) = 0.12.
+    # See hazard.combine.
     #
     # FITTED, not assumed -- `python src/fit_beta.py`. The original 1.8 was a
     # guess; it was the last hand-picked constant in the hazard model, and the
@@ -215,9 +215,9 @@ class HydrologyConfig:
     # construction -- expected area at the reference depth is pinned by the
     # prior calibration, so it carries no information about beta at all):
     #
-    #     event   rain mm   observed   fitted (beta=3.078)
+    #     event   rain mm   observed   fitted (beta=3.085)
     #     2019    412.5     31.3 km2   59.5 km2   (1.90x over)
-    #     2020    305.5     11.1 km2   21.9 km2   (1.97x over)
+    #     2020    305.5     11.1 km2   22.0 km2   (1.98x over)
     #     2021    173.7      4.1 km2    3.0 km2   (0.73x under)
     #
     # 2019 and 2020 are both overpredicted by about the same factor while 2021
@@ -246,14 +246,30 @@ class HydrologyConfig:
     # entirely (2020+2021 only) is reported below for exactly this reason.
     #
     # Honest uncertainty, improved but not resolved: leave-one-out across the
-    # three folds now runs 2.815 (drop 2020) to 4.963 (drop 2021), narrower
-    # than the two-event fit's 2.769-8.000 and no longer hitting the search
-    # bound -- a real gain in identifiability, not just a new point estimate.
-    # beta is still *anchored* rather than *fully identified*: a fourth event,
-    # ideally one whose acquisition timing and coverage can be independently
-    # checked against its IMD peak the way 2019's was, is what would close
-    # this. Re-run fit_beta.py when one exists.
-    runoff_logit_beta: float = 3.078
+    # three folds runs 2.822 (drop 2020) to 4.973 (drop 2021), essentially
+    # the same spread as the pointwise fit's 2.815-4.963. beta is still
+    # *anchored* rather than *fully identified*: a fourth event, ideally one
+    # whose acquisition timing and coverage can be independently checked
+    # against its IMD peak the way 2019's was, is what would close this.
+    # Re-run fit_beta.py when one exists.
+    #
+    # Routed vs pointwise (2026-08-27): this value is now fitted against
+    # pluvial.routed_runoff_ratio() -- catchment-accumulated runoff, not each
+    # pixel's own curve number -- which is what hazard.combine() uses by
+    # default (src/hazard.py build_routed_basis()/generate_hazard_rasters()).
+    # The fitted value barely moved (3.078 pointwise -> 3.085 routed) and the
+    # resulting hazard surface is nearly identical to the pointwise one at
+    # 200mm: correlation 0.9987, mean pixel difference +0.00002, max |diff|
+    # 0.042. That is a real, checked result, not an assumption: susceptibility
+    # already carries most of the catchment signal via features like
+    # upstream_cn (permutation importance 0.0700, 3rd of 16) and river_dist,
+    # so what is left for the *rainfall-response ratio* to add is only the
+    # marginal change in that signal away from the reference event -- and
+    # that marginal effect turns out to be small here. Routing the runoff was
+    # still worth doing: it replaces an assumption (a pixel only sees its own
+    # rain) with a measurement (it mostly does, and here is by how much),
+    # which is different from confirming nothing changed.
+    runoff_logit_beta: float = 3.085
 
 @dataclass(frozen=True)
 class RiskThresholds:
@@ -266,37 +282,43 @@ class RiskThresholds:
     meaning. Re-derive with `python src/risk_thresholds.py` after any retrain;
     they are properties of the fitted probabilities, not constants.
 
-    Against the NDEM inventory at 443 mm (base rate 3.66%):
+    Against the NDEM inventory at 443 mm (base rate 3.64%), re-derived
+    2026-08-27 after routing the fluvial hazard's rainfall response
+    (src/hazard.py build_routed_basis()) and refitting beta (3.078 -> 3.085):
 
         band       threshold  precision  recall   lift over base rate
-        moderate      0.023      0.071    0.951         2x
-        high          0.050      0.121    0.801         3x
-        severe        0.134      0.256    0.363         7x
-        critical      0.297      0.508    0.042        14x
+        moderate      0.024      0.078    0.954         2x
+        high          0.056      0.134    0.814         4x
+        severe        0.125      0.281    0.386         8x
+        critical      0.269      0.539    0.041        15x
 
     Precision is low in the lower bands because the target is rare: flagging
     95% of the flood necessarily flags a lot of ground that stayed dry. The
     critical band is the one to act on -- a flag there is right about half the
-    time, fourteen times the base rate -- but it catches only 4% of the
+    time, fifteen times the base rate -- but it catches only 4% of the
     extent, so it identifies the worst places rather than all of them.
+
+    Moved only slightly from the pre-routing values (0.023 / 0.050 / 0.134 /
+    0.297) -- consistent with the routing change itself moving the 443 mm
+    (reference-event) hazard almost not at all, since ratio == 1 there by
+    construction regardless of routing. The small drift here is more likely
+    resampling noise in risk_thresholds.py's 3M-pixel PR-curve scoring than a
+    real shift; re-derived anyway rather than judged "close enough to skip",
+    per this class's own stated policy below.
 
     Previous values, against the Sentinel-1 inventory (base rate 1.4%), were
     0.022 / 0.070 / 0.133 / 0.271. Before that they were 0.10 / 0.20 / 0.30 /
     0.50, inherited from an uncalibrated score inflated ~11x, which classified
     the 2018 catastrophe as "monitoring active".
 
-    The previous values (0.10 / 0.20 / 0.30 / 0.50) were inherited from the
-    uncalibrated score, which was inflated by roughly 11x. Carried onto the
-    corrected scale they classified the actual 2018 catastrophe as
-    "monitoring active".
-
-    Re-derive with the precision-recall curve whenever the model is retrained;
-    the thresholds are properties of the fitted probabilities, not constants.
+    Re-derive with the precision-recall curve (`python src/risk_thresholds.py`)
+    whenever the model is retrained; these are properties of the fitted
+    probabilities, not constants.
     """
-    safe: float = 0.023
-    moderate: float = 0.050
-    high: float = 0.134
-    critical: float = 0.297
+    safe: float = 0.024
+    moderate: float = 0.056
+    high: float = 0.125
+    critical: float = 0.269
 
     # Alert triggers, as a fraction of the mapped district area. Calibrated so
     # that the reference event (400 mm, 0.65% of the district in the critical
@@ -320,10 +342,10 @@ class VisualizationConfig:
     # district flat green.
     flood_colors: list = field(default_factory=lambda: [
         (0.000, "#1a9850"),  # Safe
-        (0.023, "#91cf60"),  # Moderate (captures 95% of the observed flood)
-        (0.050, "#fee08b"),  # High (captures 80%)
-        (0.134, "#fdae61"),  # Severe (max-F1 operating point)
-        (0.297, "#d73027"),  # Critical (precision 0.51, 14x base rate)
+        (0.024, "#91cf60"),  # Moderate (captures 95% of the observed flood)
+        (0.056, "#fee08b"),  # High (captures 81%)
+        (0.125, "#fdae61"),  # Severe (max-F1 operating point)
+        (0.269, "#d73027"),  # Critical (precision 0.54, 15x base rate)
         (1.000, "#a50026"),  # Extreme
     ])
     

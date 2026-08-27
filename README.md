@@ -10,30 +10,38 @@
 ## Live rainfall evaluation
 
 The two model layers are computed **on demand**. Moving the rainfall slider
-re-evaluates the model at that depth in roughly 60–90 ms; nothing is
+re-evaluates the model at that depth in roughly 90–96 ms; nothing is
 interpolated between pre-rendered scenario rasters.
 
-That is possible because both surfaces are closed-form in rainfall:
+That is possible because both surfaces are closed-form in rainfall, and both
+now route runoff downslope rather than evaluating it pointwise:
 
 ```
-fluvial(x, P) = sigma( logit(S(x)) + beta * ln( Q(x,P) / Q(x,P_ref) ) )
+fluvial(x, P) = sigma( logit(S(x)) + beta * ln( Q_routed(x,P) / Q_routed(x,P_ref) ) )
 pluvial(x, P) = f( routed SCS-CN runoff(P), local gradient )
 ```
 
 `S` is the learned susceptibility and does not depend on rainfall, so it is
-loaded once. `Q` is SCS-CN runoff, which depends on a pixel only through its
-curve number — and there are just seven curve numbers in this district. So a
-new rainfall value costs seven scalar evaluations plus array arithmetic on the
-display grid, with **no re-routing and no model re-fit**.
+loaded once. `Q_routed(x, P)` is `pluvial.routed_runoff_ratio()`: SCS-CN
+runoff depends on a pixel only through its curve number — seven curve numbers
+in this district — so the upstream *count* of each class draining through x
+(`grid.basis`) is accumulated once at cache-build time, and a new rainfall
+value costs seven scalar evaluations plus a weighted sum over that fixed
+basis, with **no re-routing and no model re-fit**. Both the fluvial layer and
+the pluvial index draw on the same basis, so a rainfall change moves them
+consistently rather than the fluvial layer reacting locally while the pluvial
+one reacts to the catchment.
 
 ```bash
 python src/live_model.py --build       # precompute, ~30 s, writes a 5.9 MB cache
-python src/live_model.py --benchmark   # 60-90 ms per rainfall value
+python src/live_model.py --benchmark   # 90-96 ms per rainfall value
 ```
 
-Verified by driving the app: at 50 / 120 / 200 / 300 mm the rendered overlay is
-four distinct images, and the reported expected flooded area moves 1 → 4 → 12 →
-25 km².
+Verified by driving the app (2026-08-27, headless Chromium against the running
+server, not just an import-and-check): at 50 / 120 / 200 / 300 mm the rendered
+overlay is four distinct images, the alert banner moves from MONITORING to
+CRITICAL, and the reported expected flooded area on the live display grid
+moves 0.0 → 0.7 → 4.8 → 20.5 km².
 
 ### Two layers, deliberately not blended
 
@@ -363,20 +371,24 @@ hazard map against the 2018 inventory, not chosen as round numbers:
 
 | Band | Lower edge | Captures of observed flooding | Precision | Cumulative area at 443 mm |
 |---|---|---|---|---|
-| Moderate | 0.023 | 95.1% | 0.071 | 941.5 km² |
-| High | 0.050 | 80.1% | 0.121 | 466.5 km² |
-| Severe | 0.134 | 36.3% (max F1) | 0.256 | 90.1 km² |
-| Critical | 0.297 | 4.2% | 0.508 | 5.2 km² |
+| Moderate | 0.024 | 95.4% | 0.078 | 852.5 km² |
+| High | 0.056 | 81.4% | 0.134 | 412.5 km² |
+| Severe | 0.125 | 38.6% (max F1) | 0.281 | 106.3 km² |
+| Critical | 0.269 | 4.1% | 0.539 | 5.9 km² |
 
 Area is cumulative — "≥ critical" rather than the critical slice alone. District
-base rate is 3.66% (NDEM, 443 mm), so the critical band runs ~14× the no-skill
+base rate is 3.64% (NDEM, 443 mm), so the critical band runs ~15× the no-skill
 rate. The previous thresholds, against the Sentinel-1 inventory (base rate
 1.4%), were 0.022 / 0.070 / 0.133 / 0.271; before that, an uncalibrated score's
 0.10 / 0.20 / 0.30 / 0.50 classified the actual 2018 catastrophe as "monitoring
 active". **Re-derive these whenever the model is retrained**
 (`python src/risk_thresholds.py`) — they are properties of the fitted
-probabilities, not constants. As of the current model they re-derive to exactly
-the values already in `RiskThresholds`, so no change was needed this round.
+probabilities, not constants. Re-derived 2026-08-27 after routing the
+fluvial rainfall response and refitting beta; the edges moved only slightly
+(0.023/0.050/0.134/0.297 → 0.024/0.056/0.125/0.269), consistent with the
+routing change itself moving the 443 mm reference-event hazard almost not at
+all — the drift here is more likely PR-curve sampling noise than a real shift,
+and was re-derived anyway rather than judged close enough to skip.
 
 Permutation importance (AUC drop when shuffled), current 16-feature model:
 elevation (`dem`) 0.1357, **`dem_rel_1km` 0.0983**, **`upstream_cn` 0.0700**,
@@ -748,15 +760,28 @@ Ordered by how much each one moves the system toward actually answering
    the 2020 miss isn't explained by the acquisition-coverage issue that
    explains 2019's (checked and ruled out). A fourth event is what would
    actually resolve whether that's residual noise or a real curve-shape gap.
-3. **Route the runoff in the hazard step.** `combine()` still applies SCS-CN
-   *pointwise*: a pixel's forcing is the rain that fell on it, and none of
-   what its catchment delivers. The D8 network in `src/routing.py` exists and
-   is only used for a static feature; `src/upstream_routing.py` separately
-   built and validated a *basin-scale* contributing-area layer (Periyar,
-   Chalakudy, Muvattupuzha) but that is a different gap — bringing water in
-   from beyond the district boundary, not accumulating `Q(x, P)` downslope
-   within it. Neither is wired into `combine()` yet. Still the cheapest real
-   improvement on the list.
+3. ~~Route the runoff in the hazard step.~~ **Done, with a modest result.**
+   `combine()` no longer applies SCS-CN pointwise by default; it accepts a
+   `runoff_ratio` computed by `pluvial.routed_runoff_ratio()`, which
+   accumulates rainfall-dependent runoff downslope through the same D8
+   network `PluvialModel` already used for the pluvial index, reused rather
+   than reimplemented at 10 m. `hazard.generate_hazard_rasters()`,
+   `live_model.fluvial_probability()` (so the live slider and the batch
+   rasters answer the same question) and `fit_beta.py` all now route by
+   default.
+
+   The honest result: it barely changed anything. Beta refit against the
+   routed ratio moved 3.078 → 3.085, and the routed hazard surface at 200 mm
+   correlates 0.9987 with the pointwise one (mean pixel difference +0.00002,
+   max 0.042). Susceptibility already carries most of the catchment signal
+   through features like `upstream_cn` and `river_dist`, so the *rainfall-
+   response ratio* — the marginal change in that signal away from the
+   reference event — had comparatively little left to add. Worth having
+   anyway: it replaces an assumption with a measurement, which is a different
+   thing from confirming nothing changed. `src/upstream_routing.py`'s
+   *basin-scale* contributing-area layer (Periyar, Chalakudy, Muvattupuzha)
+   remains a separate, still-open gap — bringing water in from beyond the
+   district boundary, which this change does not touch.
 4. **Spatially variable rainfall.** Scenarios apply one scalar depth
    everywhere; `runoff_depth()` takes a single `rainfall_mm` float, not a
    raster. Accepting a rainfall raster (IMD gridded, or a forecast field)
