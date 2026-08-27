@@ -31,6 +31,24 @@ EVALUATION_DIR = PROJECT_ROOT / "evaluation"
 GEOAI_NEW_DIR = PROJECT_ROOT / "GeoAI_New"
 GEOAI_DATA_DIR = PROJECT_ROOT / "GeoAI_Data"
 
+#: Pre-downsampled copies of the static display layers, built by
+#: `python src/make_display_rasters.py`.
+#:
+#: The dashboard never shows a static layer at full resolution -- every read
+#: goes through data_loading.read_downsampled(), which resamples to
+#: RASTER.max_dimension (1000 px) before anything is rendered. So the 3.7 GB
+#: of full-resolution rasters in GeoAI_New/ contribute exactly nothing to what
+#: the user sees; they exist because they are also the *model's* inputs.
+#: Shipping them in a container image is what made it ~8 GB, which is past the
+#: image-size limit of most hosts.
+#:
+#: `display/` holds the same 14 layers already reduced to display resolution.
+#: get_layer_path() prefers it when present and falls back to GeoAI_New/, so a
+#: local checkout behaves exactly as before and a deployed image carries ~50 MB
+#: instead of ~1 GB. This is a packaging optimisation, not a modelling one: the
+#: susceptibility model is trained from data_aligned/, never from these files.
+DISPLAY_DIR = PROJECT_ROOT / "display"
+
 # Ensure directories exist
 for d in [DATA_DIR, PROCESSED_DIR, OUTPUT_DIR, MODELS_DIR, STATIC_DIR, EVALUATION_DIR]:
     d.mkdir(parents=True, exist_ok=True)

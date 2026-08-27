@@ -1,0 +1,93 @@
+# Build context exclusions.
+#
+# There was no .dockerignore before this, which meant the entire project
+# directory -- including .venv/, .git/, and roughly 5 GB of rasters that the
+# running app never opens -- was sent to the Docker daemon on every build.
+#
+# The rule of thumb below: the image needs the code, the trained artefacts the
+# app loads at runtime, and the display rasters. It does not need anything
+# whose only purpose is to *build* those artefacts.
+
+# ── Environments and VCS ──
+.venv/
+venv*/
+env/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Editor / OS ──
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── Tests and dev tooling (not shipped; CI runs them from the checkout) ──
+tests/
+requirements-dev.txt
+requirements-legacy.txt
+.pre-commit-config.yaml
+
+# ── Full-resolution model inputs ────────────────────────────────────────────
+# 3.7 GB. The dashboard reads static layers through read_downsampled() at
+# 1000 px, so it uses display/ instead (21 MB, built by
+# src/make_display_rasters.py). GeoAI_New/ is a *model input* directory, needed
+# by align_data.py and susceptibility.py --train, neither of which runs in the
+# container.
+GeoAI_New/
+
+# 1.3 GB of aligned feature rasters. Consumed by the training and
+# feature-derivation pipeline; the app reads the precomputed models/live_model.npz
+# instead. Needed only if you rebuild the model inside the image.
+data_aligned/
+
+# 874 MB IMD gridded-rainfall archive plus other acquisition caches. The
+# forecast ships as models/rainfall_forecast_latest.json (see
+# rainfall_forecast.write_snapshot) rather than recomputing from the archive.
+data/
+
+# Pre-rewrite intermediates and archives.
+archive/
+processed/
+GeoAI_Data/
+
+# ── Large derived rasters nothing loads at runtime ──
+# Note what is deliberately NOT excluded here: outputs/flood_hazard_*.tif.
+# .dockerignore applies to the whole build context, so excluding those would
+# also starve the `api` stage, which serves them. They stay in the context and
+# each stage COPYs only what it needs.
+#
+# These two, though, no stage needs: susceptibility.tif is an input to
+# live_model.build() (the container ships the built live_model.npz instead),
+# and the uncertainty surface is only read by the offline evaluation scripts.
+outputs/susceptibility_uncertainty.tif
+outputs/susceptibility.tif
+outputs/susceptibility.tif.aux.xml
+
+# ── Superseded model binaries (docs/artefacts.md) ──
+# 245 MB of archived Keras/PyTorch U-Net weights. Nothing in the active
+# pipeline loads these; the shipped model is the gradient-boosted
+# susceptibility surface baked into live_model.npz.
+models/*.h5
+models/*.pth
+
+# ── Reports and scratch ──
+evaluation/
+docs/
+*.log
+*.tmp
+*.aux.xml
+*.lck
+sentinel_data/
+Dockerfile
+.dockerignore
+README.md

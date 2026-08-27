@@ -817,9 +817,16 @@ Ordered by how much each one moves the system toward actually answering
   `GeoAI_New/routing_work/routing_validation.json` for the outcome. Either
   way it is not yet an input to `combine()` — see item 3 above.
 - The Streamlit app's data path, rendering and every static layer are
-  smoke-tested, and the FastAPI routes are exercised end to end, but neither
-  server has been run under a browser in this environment. The Docker build and
-  CI workflow have not been executed either.
+  smoke-tested, and the FastAPI routes are exercised end to end. Both servers
+  have since been run for real: the dashboard under a browser (all 17 layers,
+  the rainfall slider, the 2018 event and the advanced panel), and the API by
+  requesting all nine routes against the real artefacts. The Docker build and
+  the CI lint/format/type steps have all been executed too.
+- The rainfall forecast's "as of" date trails live conditions by however much
+  of the current calendar year has passed. IMD's yearwise archive ships a
+  fixed-size binary per year and the in-progress year fails its parser, so the
+  most recent usable series ends at the last closed year. This is a property of
+  the free archive format, not a caching bug.
 
 ## API
 
@@ -887,18 +894,56 @@ The suite includes regression tests for previously-shipped defects: nodata
 sentinels surviving post-processing, the 30 m vs 10 m cell-size error, layer
 nodata rules that never matched, and non-monotonic rainfall response.
 
-## Docker
+## Docker and deployment
 
 ```bash
-docker build --target app -t geoai-flood .
-docker run -p 8501:8501 geoai-flood
+# One-time: build the display-resolution rasters the image ships (21 MB).
+python src/make_display_rasters.py
 
-docker build --target fastapi -t geoai-flood-api .
-docker run -p 8000:8000 geoai-flood-api
+# Optional but recommended: cache the rainfall forecast so the container
+# never reaches for the 874 MB IMD archive.
+python src/rainfall_forecast.py --snapshot
+
+# Both services.
+docker compose up --build          # dashboard :8501, API :8000
+docker compose up dashboard        # dashboard only
 ```
 
-The image expects `data_aligned/` to exist in the build context — run
-`python align_data.py` first.
+Or per-image:
+
+```bash
+docker build --target app -t geoai-flood-dashboard .   # Streamlit, :8501
+docker build --target api -t geoai-flood-api .         # FastAPI,   :8000
+```
+
+### What ships, and what does not
+
+The dashboard image deliberately does not contain the model's *inputs*, only
+its *outputs*. That distinction is what makes it deployable:
+
+| Excluded | Size | Why the running app does not need it |
+|---|---|---|
+| `GeoAI_New/` | 3.7 GB | Full-resolution conditioning factors. Every static layer is read through `read_downsampled()` at 1000 px, so the image ships `display/` (21 MB) instead — identical pixels, 48× smaller. Needed only by `align_data.py`. |
+| `data_aligned/` | 1.3 GB | Training/feature inputs. The app reads the precomputed `models/live_model.npz`. |
+| `data/imd_rain/` | 874 MB | Rainfall archive. The forecast ships as `models/rainfall_forecast_latest.json`; the prediction is anchored to the last closed calendar year, so a snapshot loses nothing. |
+| `models/*.pth`, `*.h5` | 245 MB | Archived U-Net weights (`docs/artefacts.md`). Nothing in the active pipeline loads them. |
+| `.venv/`, `.git/` | ~10 GB | Were previously being sent to the daemon on every build — there was no `.dockerignore`. |
+
+The API image is separate because it serves the pre-generated per-scenario
+rasters (`outputs/flood_hazard_*.tif`, ~530 MB) that the dashboard does not
+open — the dashboard evaluates hazard live instead. Running both from one
+container would mean shipping both data sets and supervising two servers under
+PID 1; `docker-compose.yml` runs them as two services.
+
+### Deployment notes
+
+- Both images run as a non-root user and declare a `HEALTHCHECK`.
+- The API's `CORSConfig` is `allow_origins=["*"]` with `allow_methods=["GET"]`
+  and `allow_credentials=False`. That is intentional for a read-only public
+  data API; tighten `APIConfig.cors_origins` if it is ever put behind auth.
+- Neither service holds state, so both scale horizontally. The API's
+  `load_hazard` LRU-caches up to 8 rasters of ~42 M float32 pixels, which is
+  what the 4 GB memory limit in `docker-compose.yml` accounts for.
 
 ## Acknowledgments
 

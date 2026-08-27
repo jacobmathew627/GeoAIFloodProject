@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.coverage
 .Python
 *.egg-info/
 dist/
@@ -58,6 +59,14 @@ outputs/flood_hazard_*.tif
 
 # Live model cache (regenerable: python src/live_model.py --build)
 models/live_model.npz
+
+# Display-resolution static layers (regenerable: python src/make_display_rasters.py).
+# Derived from GeoAI_New/, same as data_aligned/ and live_model.npz above, so it
+# is built rather than committed -- and *.tif is LFS-tracked here, so committing
+# 14 more of them would spend LFS quota on data one command reproduces.
+# Build this before `docker build`; the image reads it instead of the 3.7 GB of
+# full-resolution originals (see .dockerignore).
+display/
 
 # Upstream DEM mosaic (regenerable: python src/upstream_dem.py --build)
 GeoAI_New/Upstream_DEM.tif

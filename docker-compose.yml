@@ -1,0 +1,60 @@
+# Both services of the GeoAI Flood Risk platform.
+#
+#   docker compose up --build        dashboard on :8501, API on :8000
+#   docker compose up dashboard      dashboard only
+#
+# The two images are deliberately separate rather than one container running
+# both processes: they need different data (the dashboard evaluates hazard live
+# from live_model.npz; the API serves ~530 MB of pre-generated per-scenario
+# rasters), they scale differently, and a single container running two servers
+# has no working supervision story for PID 1.
+
+services:
+  dashboard:
+    build:
+      context: .
+      target: app
+    image: geoai-flood-dashboard:latest
+    container_name: geoai-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      # Streamlit reads .streamlit/config.toml from the image; these are the
+      # settings that must hold regardless of how it is launched.
+      STREAMLIT_SERVER_HEADLESS: "true"
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          # The live grid plus a downsampled display raster comfortably fit;
+          # this is a guard against a runaway read, not a tuned figure.
+          memory: 2G
+
+  api:
+    build:
+      context: .
+      target: api
+    image: geoai-flood-api:latest
+    container_name: geoai-api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          # backend.load_hazard lru_caches up to 8 rasters of ~42M float32
+          # pixels each; 4G leaves headroom for that cache plus the PNG encode.
+          memory: 4G

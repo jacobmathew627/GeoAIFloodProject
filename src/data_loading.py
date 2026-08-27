@@ -20,7 +20,7 @@ import rasterio
 from rasterio.enums import Resampling
 from rasterio.windows import Window
 
-from config import GEOAI_NEW_DIR, OUTPUT_DIR, RAINFALL, RASTER
+from config import DISPLAY_DIR, GEOAI_NEW_DIR, OUTPUT_DIR, RAINFALL, RASTER
 
 LOGGER = logging.getLogger("geoai_flood")
 
@@ -299,12 +299,28 @@ def load_conformal_sets(
 # Static layers
 # ──────────────────────────────────────────────
 def get_layer_path(layer_name: str, geoai_dir: Optional[Path] = None) -> Optional[Path]:
-    """Resolve a display layer name to a file path, or None if unavailable."""
-    geoai_dir = geoai_dir or GEOAI_NEW_DIR
+    """
+    Resolve a display layer name to a file path, or None if unavailable.
+
+    `display/` wins over the full-resolution source when it exists. Those are
+    pre-downsampled copies written by src/make_display_rasters.py, identical to
+    what read_downsampled() would produce on the fly -- see DISPLAY_DIR in
+    config.py for why a deployed image carries them instead of the 3.7 GB of
+    originals. A local checkout has no `display/`, so it reads GeoAI_New/ and
+    behaves exactly as before.
+    """
     entry = LAYER_REGISTRY.get(layer_name)
     if entry is None:
         return None
-    path = geoai_dir / entry[0]
+
+    # An explicit geoai_dir is an override from the caller (tests, or a
+    # non-standard layout) and must not be silently redirected.
+    if geoai_dir is None:
+        display_path = DISPLAY_DIR / entry[0]
+        if display_path.exists():
+            return display_path
+
+    path = (geoai_dir or GEOAI_NEW_DIR) / entry[0]
     return path if path.exists() else None
 
 

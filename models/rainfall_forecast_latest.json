@@ -1,0 +1,8 @@
+{
+  "as_of": "2025-12-28",
+  "horizon_days": 3,
+  "predicted_total_mm": 1.8,
+  "last_3_days_mm": 0.0,
+  "last_30_days_mm": 34.5,
+  "note": "Feeds the hazard model directly: this is a 3-day storm depth, the same quantity RAINFALL.reference_event_mm expresses."
+}

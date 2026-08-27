@@ -176,7 +176,11 @@ elif layer_type == "Conformal Confidence":
             "decision at 90% confidence, not how much it will rain."
         )
 else:
-    data, meta = load_static_layer(layer_type, GEOAI_NEW_DIR)
+    # No explicit directory: get_layer_path() then prefers the pre-downsampled
+    # display/ copies when they exist (see DISPLAY_DIR in config.py) and falls
+    # back to GeoAI_New/. Passing GEOAI_NEW_DIR here would pin it to the
+    # full-resolution originals and defeat that.
+    data, meta = load_static_layer(layer_type)
 
 # ──────────────────────────────────────────────
 # Map
