@@ -12,8 +12,17 @@ Every panel here is computed from a file on disk:
     models/susceptibility_metrics.json  spatial CV, reliability, importance
     models/graph_experiment.json        the graph ablation
     models/reference_rainfall.json      ERA5 storm accumulations
-    outputs/flood_hazard_332mm.tif      for the precision-recall curve
-    data_aligned/ground_truth_aligned.tif
+    outputs/flood_hazard_{RAINFALL.reference_event_mm}mm.tif
+                                         for the precision-recall curve
+    data_aligned/{FLOOD_LABEL_RASTER}_aligned.tif
+
+Both of the last two are read from src/config.py rather than hardcoded, so this
+tracks whichever reference event and label the model is currently calibrated
+against. A previous version hardcoded `flood_hazard_332mm.tif` and
+`ground_truth_aligned.tif` -- the Sentinel-1-era, 332mm-reference generation --
+which kept producing fig4 from stale inputs for two retrains after the
+reference event moved to 443.2mm (IMD) and the label moved to NDEM, silently
+mismatched against the RiskThresholds dots drawn on the same curve.
 
 Anything missing is skipped with a warning rather than faked.
 
@@ -251,13 +260,16 @@ def fig_threshold_derivation() -> None:
         import rasterio
         from sklearn.metrics import precision_recall_curve
 
-        from config import RISK
+        from config import FLOOD_LABEL_RASTER, RAINFALL, RISK
     except Exception as exc:  # pragma: no cover
         LOGGER.warning("cannot build fig4 (%s)", exc)
         return
 
-    hazard_path = ROOT / "outputs" / "flood_hazard_332mm.tif"
-    gt_path = ROOT / "data_aligned" / "ground_truth_aligned.tif"
+    # Reference-event depth as the hazard rasters name it, e.g. 443mm -- not
+    # 443.0mm. hazard.py truncates the same way when writing these files.
+    ref_mm = int(round(RAINFALL.reference_event_mm))
+    hazard_path = ROOT / "outputs" / f"flood_hazard_{ref_mm}mm.tif"
+    gt_path = ROOT / "data_aligned" / f"{FLOOD_LABEL_RASTER}_aligned.tif"
     lulc_path = ROOT / "data_aligned" / "lulc_aligned.tif"
     if not all(p.exists() for p in (hazard_path, gt_path, lulc_path)):
         LOGGER.warning("rasters missing -- skipping fig4")
@@ -295,10 +307,10 @@ def fig_threshold_derivation() -> None:
     # collided with each other and with the no-skill line however they were
     # offset -- the points are simply too close at the high-recall end.
     bands = [
-        ("Critical", RISK.critical, (12, 8), "left"),
-        ("Severe", RISK.high, (12, 8), "left"),
-        ("High", RISK.moderate, (10, -16), "left"),
-        ("Moderate", RISK.safe, (-12, 10), "right"),
+        ("Critical", RISK.critical, (14, 10), "left"),
+        ("Severe", RISK.high, (20, 22), "left"),
+        ("High", RISK.moderate, (-16, -10), "right"),
+        ("Moderate", RISK.safe, (10, 30), "left"),
     ]
     rows = []
     for label, t, offset, ha in bands:
