@@ -203,36 +203,57 @@ class HydrologyConfig:
     # Sensitivity of flood odds to runoff, in logit units per natural-log unit
     # of the runoff ratio Q(P) / Q(P_reference). beta = 2.8 means halving the
     # runoff depth relative to the reference storm multiplies the flood odds by
-    # exp(-2.8 * ln 2) = 0.14. See hazard.combine.
+    # exp(-3.078 * ln 2) = 0.12. See hazard.combine.
     #
-    # FITTED, not assumed -- `python src/fit_beta.py`. The previous 1.8 was a
-    # guess, and it was the last hand-picked constant in the hazard model. It
-    # was also the one that decides how hard the rainfall slider bites, so its
-    # being a guess meant the slider's *shape* was unvalidated even though its
-    # endpoints were pinned to observation.
+    # FITTED, not assumed -- `python src/fit_beta.py`. The original 1.8 was a
+    # guess; it was the last hand-picked constant in the hazard model, and the
+    # one that decides how hard the rainfall slider bites, so guessing it meant
+    # the slider's *shape* was unvalidated even though its endpoints were
+    # pinned to observation.
     #
-    # Anchored on the 2021 event (173.7 mm), which is the only one with real
-    # leverage: expected area at the reference depth is fixed by the prior
-    # calibration, so P_ref carries no information about beta at all, and 2019
-    # at 412.5 mm sits too close to the 443 mm reference to constrain it. At
-    # beta = 2.815 the 2021 event predicts 3.9 km2 against 4.1 km2 observed.
-    # Fitting on 2021 alone gives 2.769, so the two agree and 2.8 is the value.
+    # Fitted jointly on three informative events (2018 is fixed by
+    # construction -- expected area at the reference depth is pinned by the
+    # prior calibration, so it carries no information about beta at all):
     #
-    # The 2019 event is deliberately discounted, and the reason is worth
-    # keeping: it fell 412.5 mm -- 7% below the reference -- yet its NDEM extent
-    # is 31.3 km2 against the reference event's 78.7 km2. No response that is
-    # monotonic in rainfall can drop 60% of its extent over a 7% fall in depth.
-    # Its label footprint also stops at column 4639 where 2018 reaches 6116, so
-    # it never covers the eastern district. That is satellite coverage and
-    # acquisition timing, not hydrology.
+    #     event   rain mm   observed   fitted (beta=3.078)
+    #     2019    412.5     31.3 km2   59.5 km2   (1.90x over)
+    #     2020    305.5     11.1 km2   21.9 km2   (1.97x over)
+    #     2021    173.7      4.1 km2    3.0 km2   (0.73x under)
     #
-    # Honest uncertainty: with only two informative events the leave-one-out
-    # spread runs 2.769 to 8.000, the upper fold hitting the search bound.
-    # beta is therefore *anchored* rather than *identified*. It is a better
-    # number than 1.8 because it is tied to an observed extent instead of to
-    # nothing, but a third well-covered event at a genuinely different depth is
-    # what would pin it down. Re-run fit_beta.py when one exists.
-    runoff_logit_beta: float = 2.8
+    # 2019 and 2020 are both overpredicted by about the same factor while 2021
+    # is underpredicted -- a joint fit lands between them rather than matching
+    # any one event well. Checked, not assumed: this is *not* the same
+    # acquisition-coverage effect that discounts 2019 below. 2020's NDEM
+    # footprint spans columns 827-5401 (2,120 km2 bounding box) -- comparable
+    # to 2018's 633-6116 and much wider than 2019's 786-4639 -- so 2020 is not
+    # obviously coverage-truncated. Its flooded fraction *within* that box is
+    # just low (0.6%, against 2018's 3.8% and 2019's 2.1%), consistent with a
+    # genuinely smaller, sparser event rather than a clipped one. So the
+    # 2019/2020 overprediction looks like two different causes producing the
+    # same symptom: 2019 from truncated coverage, 2020 from something this
+    # single global curve does not capture at the low end -- open question.
+    #
+    # 2019 is kept in the fit despite the caveat that flagged it originally:
+    # it fell 412.5 mm -- 7% below the reference -- yet its NDEM extent is
+    # 31.3 km2 against the reference event's 78.7 km2. No response that is
+    # monotonic in rainfall can drop 60% of its extent over a 7% fall in
+    # depth, and its label footprint stops at column 4639 where 2018 reaches
+    # 6116, so it never covers the eastern district -- satellite coverage and
+    # acquisition timing, not hydrology. It stayed in this fit (rather than
+    # being dropped) because with three events available, one discounted-but-
+    # included point pulls the joint fit toward it far less than it would
+    # dominate a two-event fit, and the leave-one-out fold that excludes it
+    # entirely (2020+2021 only) is reported below for exactly this reason.
+    #
+    # Honest uncertainty, improved but not resolved: leave-one-out across the
+    # three folds now runs 2.815 (drop 2020) to 4.963 (drop 2021), narrower
+    # than the two-event fit's 2.769-8.000 and no longer hitting the search
+    # bound -- a real gain in identifiability, not just a new point estimate.
+    # beta is still *anchored* rather than *fully identified*: a fourth event,
+    # ideally one whose acquisition timing and coverage can be independently
+    # checked against its IMD peak the way 2019's was, is what would close
+    # this. Re-run fit_beta.py when one exists.
+    runoff_logit_beta: float = 3.078
 
 @dataclass(frozen=True)
 class RiskThresholds:

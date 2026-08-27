@@ -662,15 +662,21 @@ These are modelling choices, not measurements. Each is a single constant in
   flood-forecasting product.
 - **Initial abstraction ratio 0.05** rather than the classic 0.20, following
   Woodward et al. (2003), with the retention rescaled accordingly.
-- **beta = 2.8** logit units per log-unit of runoff ratio — the sensitivity of
-  flood odds to rainfall. Now *fitted* (`python src/fit_beta.py`) against the
-  NDEM 2019 and 2021 extents rather than assumed, but anchored more than
-  identified: the 2021 event (173.7 mm → 4.1 km²) carries essentially all the
-  leverage, 2019 is discounted for acquisition-timing reasons (see
-  [Known limitations](#known-limitations)), and the leave-one-out spread runs
-  2.77 to 8.00 — the upper end hits the search bound. A third well-covered
-  event at a different depth would pin this down; until then, treat 2.8 as
-  the honest current best guess rather than a converged estimate.
+- **beta = 3.078** logit units per log-unit of runoff ratio — the sensitivity
+  of flood odds to rainfall. *Fitted* (`python src/fit_beta.py`) jointly on
+  three NDEM events (2019, 2020, 2021 — 2018 is fixed by construction and
+  carries no information). Leave-one-out now runs **2.815 to 4.963**, down
+  from the two-event fit's 2.77–8.00, and no longer hits the search bound —
+  identifiability improved with the third event, not just the point estimate.
+  Still not fully resolved: the joint fit overpredicts both 2019 and 2020 by
+  a similar factor (~1.9–2.0x) while underpredicting 2021 (0.73x). For 2019
+  that's traced to acquisition-timing coverage loss (see
+  [Known limitations](#known-limitations)); for 2020 the same check was run
+  and *ruled that out* — its NDEM footprint bbox (2,120 km²) is comparable to
+  2018's, not truncated like 2019's — so something about the response curve
+  itself, not coverage, is unaccounted for at that depth. A fourth event
+  would help distinguish "one global beta is the wrong model" from
+  "acquisition noise across all three."
 - **Population and damage figures** in the alert panel are district-average
   density and a flat per-km² damage rate. They are labelled "planning
   estimate" in the UI and are not model outputs.
@@ -733,12 +739,15 @@ Ordered by how much each one moves the system toward actually answering
    be validated against the thing it actually claims to predict. A formal
    request is drafted at
    [docs/data-requests/ksdma-waterlogging-records.md](docs/data-requests/ksdma-waterlogging-records.md).
-2. ~~More events, to fit `beta`.~~ **Done, partially.** `python src/fit_beta.py`
-   fits the rainfall sensitivity against NDEM 2019 and 2021 instead of
-   assuming it (1.8 → **2.8**). But it is anchored more than identified — 2021
-   alone carries the leverage, and the leave-one-out spread runs 2.77 to
-   8.00 with the search bound hit on one fold. A third well-covered event at a
-   usefully different depth is what would actually close this one.
+2. ~~More events, to fit `beta`.~~ **Done, twice now.** `python src/fit_beta.py`
+   fits the rainfall sensitivity against NDEM extents instead of assuming it
+   (1.8 → 2.8 on two events → **3.078 on three**, once 2020's IMD rainfall was
+   derived). Leave-one-out narrowed from 2.77–8.00 to **2.815–4.963** — real
+   progress, no longer hitting the search bound — but the joint fit still
+   overpredicts 2019 and 2020 by a similar factor and underpredicts 2021, and
+   the 2020 miss isn't explained by the acquisition-coverage issue that
+   explains 2019's (checked and ruled out). A fourth event is what would
+   actually resolve whether that's residual noise or a real curve-shape gap.
 3. **Route the runoff in the hazard step.** `combine()` still applies SCS-CN
    *pointwise*: a pixel's forcing is the rain that fell on it, and none of
    what its catchment delivers. The D8 network in `src/routing.py` exists and

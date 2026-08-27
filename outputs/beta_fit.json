@@ -1,49 +1,64 @@
 {
-  "beta_fitted": 2.815,
-  "beta_assumed": 1.8,
+  "beta_fitted": 3.078,
+  "beta_assumed": 2.8,
   "reference_mm": 443.0,
-  "n_events": 3,
-  "n_informative": 2,
+  "n_events": 4,
+  "n_informative": 3,
   "per_event": [
     {
       "event": "2018",
       "rainfall_mm": 443.2,
       "observed_km2": 78.7,
       "predicted_km2_fitted": 74.7,
-      "predicted_km2_assumed": 74.6,
+      "predicted_km2_assumed": 74.7,
       "informative": false
     },
     {
       "event": "2019",
       "rainfall_mm": 412.5,
       "observed_km2": 31.3,
-      "predicted_km2_fitted": 60.7,
-      "predicted_km2_assumed": 65.4,
+      "predicted_km2_fitted": 59.5,
+      "predicted_km2_assumed": 60.8,
+      "informative": true
+    },
+    {
+      "event": "2020",
+      "rainfall_mm": 305.5,
+      "observed_km2": 11.1,
+      "predicted_km2_fitted": 21.9,
+      "predicted_km2_assumed": 24.6,
       "informative": true
     },
     {
       "event": "2021",
       "rainfall_mm": 173.7,
       "observed_km2": 4.1,
-      "predicted_km2_fitted": 3.9,
-      "predicted_km2_assumed": 11.3,
+      "predicted_km2_fitted": 3.0,
+      "predicted_km2_assumed": 3.9,
       "informative": true
     }
   ],
   "leave_one_out": [
     {
       "held_out": "2019",
-      "beta": 2.769,
-      "predicted_km2": 60.9,
+      "beta": 3.038,
+      "predicted_km2": 59.7,
       "observed_km2": 31.3,
-      "ratio": 1.95
+      "ratio": 1.91
+    },
+    {
+      "held_out": "2020",
+      "beta": 2.815,
+      "predicted_km2": 24.4,
+      "observed_km2": 11.1,
+      "ratio": 2.19
     },
     {
       "held_out": "2021",
-      "beta": 8.0,
-      "predicted_km2": 0.2,
+      "beta": 4.963,
+      "predicted_km2": 0.6,
       "observed_km2": 4.1,
-      "ratio": 0.04
+      "ratio": 0.14
     }
   ],
   "caveat": "NDEM extents depend on satellite acquisition timing relative to the flood peak, so beta absorbs acquisition differences alongside hydrology. 2019 fell 412.5 mm against 2018's 443.2 mm -- a 7% rainfall difference -- yet shows 2.5x less extent, so most between-event variance is not rainfall. The leave-one-out spread, not the fit residual, is the honest measure of certainty."
