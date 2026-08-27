@@ -18,12 +18,12 @@ scratch script someone has to reconstruct.
 Run:  python src/risk_thresholds.py
       python src/risk_thresholds.py --rainfall 443 --apply
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import logging
-from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
@@ -77,7 +77,9 @@ def load_surface_and_labels(
     p = hazard.ravel()[idx]
     LOGGER.info(
         "Scoring %d pixels at %.0f mm: %.2f%% flooded",
-        idx.size, rainfall_mm, 100 * y.mean(),
+        idx.size,
+        rainfall_mm,
+        100 * y.mean(),
     )
     return y, p, float(rainfall_mm)
 
@@ -133,18 +135,29 @@ def derive(rainfall_mm: Optional[float] = None) -> Dict:
     LOGGER.info("Base rate (no-skill precision): %.4f", base_rate)
     LOGGER.info(
         "%-10s %9s %10s %10s %8s %8s",
-        "band", "threshold", "precision", "recall", "F1", "lift",
+        "band",
+        "threshold",
+        "precision",
+        "recall",
+        "F1",
+        "lift",
     )
     for name, b in result["bands"].items():
         LOGGER.info(
             "%-10s %9.4f %10.3f %10.3f %8.3f %7.0fx",
-            name, b["threshold"], b["precision"], b["recall"], b["f1"],
+            name,
+            b["threshold"],
+            b["precision"],
+            b["recall"],
+            b["f1"],
             b["lift_over_base_rate"],
         )
 
     current = {
-        "safe": RISK.safe, "moderate": RISK.moderate,
-        "high": RISK.high, "critical": RISK.critical,
+        "safe": RISK.safe,
+        "moderate": RISK.moderate,
+        "high": RISK.high,
+        "critical": RISK.critical,
     }
     LOGGER.info("Current config: %s", current)
     LOGGER.info(

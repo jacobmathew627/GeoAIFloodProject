@@ -67,15 +67,26 @@ def _banner(title: str, url: str) -> None:
 
 def streamlit_command() -> list:
     return [
-        sys.executable, "-m", "streamlit", "run", "app.py",
-        "--server.port=8501", "--server.address=0.0.0.0",
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        "app.py",
+        "--server.port=8501",
+        "--server.address=0.0.0.0",
     ]
 
 
 def fastapi_command(reload: bool = False) -> list:
     cmd = [
-        sys.executable, "-m", "uvicorn", "backend:app",
-        "--host", "0.0.0.0", "--port", "8000",
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "backend:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
     ]
     if reload:
         cmd.append("--reload")
@@ -109,9 +120,7 @@ def run_both() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="GeoAI Flood Risk Dashboard launcher")
-    parser.add_argument(
-        "--mode", choices=["streamlit", "fastapi", "both"], default="streamlit"
-    )
+    parser.add_argument("--mode", choices=["streamlit", "fastapi", "both"], default="streamlit")
     parser.add_argument("--reload", action="store_true", help="uvicorn autoreload (dev only)")
     parser.add_argument("--check", action="store_true", help="Report readiness and exit")
     args = parser.parse_args()

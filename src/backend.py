@@ -12,6 +12,7 @@ GET  /api/runoff              SCS-CN runoff response for a curve number
 GET  /api/places              known place lookup
 GET  /                        static dashboard
 """
+
 from __future__ import annotations
 
 import logging
@@ -115,10 +116,7 @@ def health() -> Dict[str, Any]:
 def get_scenarios() -> JSONResponse:
     available = set(available_scenarios())
     return JSONResponse(
-        [
-            {"rainfall_mm": mm, "available": mm in available}
-            for mm in RAINFALL.scenarios
-        ]
+        [{"rainfall_mm": mm, "available": mm in available} for mm in RAINFALL.scenarios]
     )
 
 

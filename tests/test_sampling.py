@@ -4,6 +4,7 @@ Tests for training-set sampling and cross-validation grouping.
 These cover the parts of the modelling pipeline that can be exercised without
 the 2.6 GB aligned raster stack.
 """
+
 import numpy as np
 import pytest
 
@@ -187,7 +188,6 @@ class TestCalibrationReport:
             assert abs(predicted - observed) < 0.05
 
     def test_detects_miscalibration(self):
-        rng = np.random.default_rng(0)
         p = np.full(10_000, 0.9)
         y = np.zeros(10_000, dtype=int)  # predicted 0.9, observed 0.0
         rows = calibration_report(y, p)

@@ -2,11 +2,11 @@
 Centralized Configuration Module for GeoAI Flood Risk Project
 All paths, parameters, and settings in one place for easy maintenance.
 """
-import os
+
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
 import logging
+
 
 # ──────────────────────────────────────────────
 # Project Root Detection
@@ -18,6 +18,7 @@ def _find_project_root() -> Path:
         if (parent / ".git").exists() or (parent / "requirements.txt").exists():
             return parent
     return current.parent
+
 
 PROJECT_ROOT = _find_project_root()
 SRC_DIR = PROJECT_ROOT / "src"
@@ -34,6 +35,7 @@ GEOAI_DATA_DIR = PROJECT_ROOT / "GeoAI_Data"
 for d in [DATA_DIR, PROCESSED_DIR, OUTPUT_DIR, MODELS_DIR, STATIC_DIR, EVALUATION_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
+
 # ──────────────────────────────────────────────
 # Logging Configuration
 # ──────────────────────────────────────────────
@@ -47,7 +49,9 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     logger = logging.getLogger("geoai_flood")
     return logger
 
+
 LOGGER = setup_logging()
+
 
 # ──────────────────────────────────────────────
 # Data Classes for Configuration
@@ -55,6 +59,7 @@ LOGGER = setup_logging()
 @dataclass(frozen=True)
 class RasterConfig:
     """Raster processing configuration."""
+
     nodata_value: float = -9999.0
     target_crs: str = "EPSG:32643"  # UTM Zone 43N
     # Master grid is the ESA-derived LULC raster, which is 10 m — not 30 m.
@@ -66,30 +71,34 @@ class RasterConfig:
 
     @property
     def pixel_area_km2(self) -> float:
-        return (self.cell_size ** 2) / 1e6
+        return (self.cell_size**2) / 1e6
+
 
 @dataclass(frozen=True)
 class ModelConfig:
     """Model configuration."""
+
     # PyTorch UNet
     unet_channels: int = 6
     unet_classes: int = 1
-    
+
     # TensorFlow Attention UNet
     attention_unet_channels: int = 13
     patch_size: int = 256
     batch_size: int = 8
     epochs: int = 50
     learning_rate: float = 1e-4
-    
+
     # Inference
     tile_size: int = 512
     tile_overlap: int = 64
     device: str = "auto"  # auto, cuda, cpu
 
+
 @dataclass(frozen=True)
 class GeoConfig:
     """Geographic configuration for Ernakulam."""
+
     map_center: tuple = (10.0, 76.3)
     zoom_start: int = 10
     district_bbox: tuple = (76.16, 9.85, 76.45, 10.15)  # min_lon, min_lat, max_lon, max_lat
@@ -97,18 +106,22 @@ class GeoConfig:
     population: int = 3_500_000
     pop_density: float = 1068.0  # people/km²
 
+
 @dataclass(frozen=True)
 class RainfallConfig:
     """Rainfall scenario configuration."""
+
     scenarios: tuple = (50, 100, 150, 200, 250, 300, 400, 443, 500)
     max_slider: int = 600
     live_weather_url: str = "https://api.open-meteo.com/v1/forecast"
-    weather_params: dict = field(default_factory=lambda: {
-        "latitude": 10.0,
-        "longitude": 76.3,
-        "hourly": "precipitation",
-        "forecast_days": 2
-    })
+    weather_params: dict = field(
+        default_factory=lambda: {
+            "latitude": 10.0,
+            "longitude": 76.3,
+            "hourly": "precipitation",
+            "forecast_days": 2,
+        }
+    )
 
     # Reference event: the storm depth the observed 2018 flood extent is taken
     # to represent. The hazard model reduces exactly to the fitted
@@ -150,6 +163,7 @@ class RainfallConfig:
 @dataclass(frozen=True)
 class HydrologyConfig:
     """SCS Curve Number runoff configuration."""
+
     # Curve numbers, AMC II, hydrologic soil group C. Kerala's uplands are
     # laterite (HSG C) and the coastal strip is alluvium (HSG B); C is the
     # conservative single-group choice. Values follow USDA NEH-630 Table 2-2.
@@ -157,15 +171,17 @@ class HydrologyConfig:
     # LULC class identities were derived empirically from this dataset by
     # cross-tabulating each class against NDVI, NDWI, elevation, slope and the
     # urban mask -- the raster does not use the standard ESA WorldCover codes.
-    curve_numbers: dict = field(default_factory=lambda: {
-        1: 100.0,  # permanent water (backwaters) - NDVI 0.05, DEM 5.5 m
-        2: 70.0,   # tree cover        - NDVI 0.48, DEM 93 m, slope 6.3 deg
-        4: 90.0,   # wetland / paddy   - DEM 4.4 m, 28% flooded in 2018
-        5: 80.0,   # cropland / grass  - NDVI 0.41, DEM 21 m
-        7: 88.0,   # built-up          - coincides exactly with urban mask
-        8: 89.0,   # bare / sparse     - marginal class, 5.9k px
-        11: 74.0,  # shrubland         - DEM 114 m, slope 9.6 deg
-    })
+    curve_numbers: dict = field(
+        default_factory=lambda: {
+            1: 100.0,  # permanent water (backwaters) - NDVI 0.05, DEM 5.5 m
+            2: 70.0,  # tree cover        - NDVI 0.48, DEM 93 m, slope 6.3 deg
+            4: 90.0,  # wetland / paddy   - DEM 4.4 m, 28% flooded in 2018
+            5: 80.0,  # cropland / grass  - NDVI 0.41, DEM 21 m
+            7: 88.0,  # built-up          - coincides exactly with urban mask
+            8: 89.0,  # bare / sparse     - marginal class, 5.9k px
+            11: 74.0,  # shrubland         - DEM 114 m, slope 9.6 deg
+        }
+    )
     default_curve_number: float = 80.0
 
     # Curve number by (LULC class, hydrologic soil group), used when
@@ -179,16 +195,18 @@ class HydrologyConfig:
     # Runoff depth is strongly nonlinear in CN, so the A-to-D spread here is
     # not a refinement -- on built-up land it is 75 against 90, which changes
     # runoff at 100 mm by roughly a factor of two.
-    curve_numbers_by_hsg: dict = field(default_factory=lambda: {
-        #      A      B      C      D
-        1:  (100.0, 100.0, 100.0, 100.0),  # water: all rainfall runs off
-        2:  ( 30.0,  55.0,  70.0,  77.0),  # tree cover (woods, good condition)
-        4:  ( 80.0,  87.0,  90.0,  92.0),  # wetland / paddy (near-ponded)
-        5:  ( 62.0,  74.0,  80.0,  84.0),  # cropland / grass (row crops, good)
-        7:  ( 75.0,  83.0,  88.0,  90.0),  # built-up (~65% impervious)
-        8:  ( 76.0,  85.0,  89.0,  92.0),  # bare / sparse (fallow)
-        11: ( 39.0,  60.0,  74.0,  80.0),  # shrubland (brush, fair)
-    })
+    curve_numbers_by_hsg: dict = field(
+        default_factory=lambda: {
+            #      A      B      C      D
+            1: (100.0, 100.0, 100.0, 100.0),  # water: all rainfall runs off
+            2: (30.0, 55.0, 70.0, 77.0),  # tree cover (woods, good condition)
+            4: (80.0, 87.0, 90.0, 92.0),  # wetland / paddy (near-ponded)
+            5: (62.0, 74.0, 80.0, 84.0),  # cropland / grass (row crops, good)
+            7: (75.0, 83.0, 88.0, 90.0),  # built-up (~65% impervious)
+            8: (76.0, 85.0, 89.0, 92.0),  # bare / sparse (fallow)
+            11: (39.0, 60.0, 74.0, 80.0),  # shrubland (brush, fair)
+        }
+    )
     default_curve_numbers_by_hsg: tuple = (62.0, 74.0, 80.0, 84.0)
 
     # Initial abstraction ratio. The classic SCS value is 0.20; re-analysis of
@@ -271,6 +289,7 @@ class HydrologyConfig:
     # which is different from confirming nothing changed.
     runoff_logit_beta: float = 3.085
 
+
 @dataclass(frozen=True)
 class RiskThresholds:
     """
@@ -315,6 +334,7 @@ class RiskThresholds:
     whenever the model is retrained; these are properties of the fitted
     probabilities, not constants.
     """
+
     safe: float = 0.024
     moderate: float = 0.056
     high: float = 0.125
@@ -331,51 +351,62 @@ class RiskThresholds:
     damage_per_km2_crores: float = 50.0
     hospitals_total: int = 15
 
+
 @dataclass(frozen=True)
 class VisualizationConfig:
     """Visualization configuration."""
+
     # Flood probability colormap. The stops sit exactly on the RiskThresholds
     # band edges, so a colour change on the map means a class change in the
     # statistics. They are deliberately bunched at the low end: the calibrated
     # probabilities are genuine, and at a 1.4% district base rate almost all
     # of the mass sits below 0.10. An evenly spaced ramp renders the whole
     # district flat green.
-    flood_colors: list = field(default_factory=lambda: [
-        (0.000, "#1a9850"),  # Safe
-        (0.024, "#91cf60"),  # Moderate (captures 95% of the observed flood)
-        (0.056, "#fee08b"),  # High (captures 81%)
-        (0.125, "#fdae61"),  # Severe (max-F1 operating point)
-        (0.269, "#d73027"),  # Critical (precision 0.54, 15x base rate)
-        (1.000, "#a50026"),  # Extreme
-    ])
-    
+    flood_colors: list = field(
+        default_factory=lambda: [
+            (0.000, "#1a9850"),  # Safe
+            (0.024, "#91cf60"),  # Moderate (captures 95% of the observed flood)
+            (0.056, "#fee08b"),  # High (captures 81%)
+            (0.125, "#fdae61"),  # Severe (max-F1 operating point)
+            (0.269, "#d73027"),  # Critical (precision 0.54, 15x base rate)
+            (1.000, "#a50026"),  # Extreme
+        ]
+    )
+
     # LULC colours. Class identities were derived empirically from this
     # dataset (see LULC_CLASS_NAMES); the raster does not use standard ESA
     # WorldCover codes, so the previous mapping mislabelled every class.
-    lulc_colors: dict = field(default_factory=lambda: {
-        1:  (0, 80, 200, 255),    # Permanent water
-        2:  (0, 110, 0, 255),     # Tree cover
-        4:  (0, 190, 200, 255),   # Wetland / paddy
-        5:  (200, 200, 60, 255),  # Cropland / grassland
-        7:  (220, 40, 40, 255),   # Built-up
-        8:  (180, 170, 150, 255), # Bare / sparse
-        11: (170, 190, 90, 255),  # Shrubland
-    })
+    lulc_colors: dict = field(
+        default_factory=lambda: {
+            1: (0, 80, 200, 255),  # Permanent water
+            2: (0, 110, 0, 255),  # Tree cover
+            4: (0, 190, 200, 255),  # Wetland / paddy
+            5: (200, 200, 60, 255),  # Cropland / grassland
+            7: (220, 40, 40, 255),  # Built-up
+            8: (180, 170, 150, 255),  # Bare / sparse
+            11: (170, 190, 90, 255),  # Shrubland
+        }
+    )
+
 
 @dataclass(frozen=True)
 class APIConfig:
     """FastAPI configuration."""
+
     host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = False
     cors_origins: list = field(default_factory=lambda: ["*"])
 
+
 @dataclass(frozen=True)
 class StreamlitConfig:
     """Streamlit configuration."""
+
     port: int = 8501
     address: str = "0.0.0.0"
     theme_base: str = "light"
+
 
 # ──────────────────────────────────────────────
 # Global Config Instances
@@ -414,6 +445,7 @@ LULC_CLASS_NAMES = {
 # them in trains a lake detector rather than a flood model.
 PERMANENT_WATER_CLASS = 1
 
+
 # ──────────────────────────────────────────────
 # File Path Helpers
 # ──────────────────────────────────────────────
@@ -421,21 +453,26 @@ def get_model_path(name: str) -> Path:
     """Get full path to model file."""
     return MODELS_DIR / name
 
+
 def get_output_path(name: str) -> Path:
     """Get full path to output file."""
     return OUTPUT_DIR / name
+
 
 def get_processed_path(name: str) -> Path:
     """Get full path to processed file."""
     return PROCESSED_DIR / name
 
+
 def get_geoai_new_path(name: str) -> Path:
     """Get full path to GeoAI_New file."""
     return GEOAI_NEW_DIR / name
 
+
 def get_static_path(name: str) -> Path:
     """Get full path to static file."""
     return STATIC_DIR / name
+
 
 # ──────────────────────────────────────────────
 # Feature Channel Definitions
@@ -444,17 +481,17 @@ def get_static_path(name: str) -> Path:
 # align_data.py. Order is fixed: it defines the model's input vector and is
 # persisted alongside the trained model so the two cannot drift apart.
 SUSCEPTIBILITY_FEATURES = [
-    "dem",         # elevation (m)
-    "slope",       # degrees
-    "hand",        # height above nearest drainage (m) - dominant control
-    "twi",         # topographic wetness index
-    "tpi",         # topographic position index
-    "spi",         # stream power index (signed log)
-    "flow",        # log1p flow accumulation
+    "dem",  # elevation (m)
+    "slope",  # degrees
+    "hand",  # height above nearest drainage (m) - dominant control
+    "twi",  # topographic wetness index
+    "tpi",  # topographic position index
+    "spi",  # stream power index (signed log)
+    "flow",  # log1p flow accumulation
     "river_dist",  # distance to drainage (m)
     "urban_dist",  # distance to built-up (m)
-    "ndvi",        # vegetation
-    "ndwi",        # surface water / moisture
+    "ndvi",  # vegetation
+    "ndwi",  # surface water / moisture
     # `urban_mask` was here. Dropped: permutation importance came out at
     # 0.000, -0.000 and -0.0001 on three consecutive retrains, meaning
     # shuffling it does not hurt the model and on the last two it marginally
@@ -466,8 +503,8 @@ SUSCEPTIBILITY_FEATURES = [
     # Context features (src/derive_features.py). Everything above describes
     # the pixel itself; these describe what surrounds it, which is what a
     # pixel-independent model structurally cannot see.
-    "upstream_cn",    # catchment-average curve number, routed on the D8 network
-    "dem_rel_1km",    # elevation relative to the ~1 km neighbourhood mean
+    "upstream_cn",  # catchment-average curve number, routed on the D8 network
+    "dem_rel_1km",  # elevation relative to the ~1 km neighbourhood mean
     # Drainage network (src/osm_drainage.py, OpenStreetMap/ODbL). Whether water
     # can get away is a first-order control and nothing above described it. The
     # sign is deliberately left to the model: measured against the documented
@@ -475,7 +512,7 @@ SUSCEPTIBILITY_FEATURES = [
     # less (Kochi's canals are tidal and back up), so hand-coding the intuitive
     # direction would be wrong -- and hand-coding the measured direction would
     # fit the validation set. Fitted here on NDEM flood labels instead.
-    "osm_drain_dist",     # metres to the nearest mapped drain, ditch or canal
+    "osm_drain_dist",  # metres to the nearest mapped drain, ditch or canal
     "osm_drain_density",  # km of mapped channel per km2, 1 km neighbourhood
 ]
 
@@ -484,7 +521,9 @@ SUSCEPTIBILITY_FEATURES = [
 PYTORCH_STANDARD_FEATURES = ["dem", "slope", "flow", "lulc"]
 PYTORCH_ROBUST_FEATURES = PYTORCH_STANDARD_FEATURES + ["sar_vv", "sar_vh"]
 PYTORCH_SUPERCHARGED_FEATURES = PYTORCH_ROBUST_FEATURES + [
-    "twi", "river_dist", "urban_dist",
+    "twi",
+    "river_dist",
+    "urban_dist",
 ]
 
 # ──────────────────────────────────────────────
@@ -495,8 +534,8 @@ PYTORCH_SUPERCHARGED_FEATURES = PYTORCH_ROBUST_FEATURES + [
 # channels, `inc.*` keys) and cannot be loaded by it. It is deliberately
 # absent from this map rather than listed and broken.
 MODEL_FILES = {
-    "pytorch_standard": "flood_model_real2018.pth",       # 4 channels
-    "pytorch_robust": "flood_model_robust_sar.pth",       # 6 channels
+    "pytorch_standard": "flood_model_real2018.pth",  # 4 channels
+    "pytorch_robust": "flood_model_robust_sar.pth",  # 6 channels
     "pytorch_supercharged": "flood_model_supercharged.pth",  # 9 channels
 }
 
@@ -542,13 +581,14 @@ KNOWN_PLACES = {
     "North Paravur": [10.158, 76.214],
 }
 
+
 # ──────────────────────────────────────────────
 # Validation
 # ──────────────────────────────────────────────
 def validate_environment() -> list[str]:
     """Validate that required directories and files exist. Returns list of warnings."""
     warnings = []
-    
+
     for name, path in [
         ("PROJECT_ROOT", PROJECT_ROOT),
         ("SRC_DIR", SRC_DIR),
@@ -560,13 +600,14 @@ def validate_environment() -> list[str]:
     ]:
         if not path.exists():
             warnings.append(f"{name} does not exist: {path}")
-    
+
     # Check for at least one model
     model_files = list(MODELS_DIR.glob("*.pth")) + list(MODELS_DIR.glob("*.h5"))
     if not model_files:
         warnings.append(f"No model files found in {MODELS_DIR}")
-    
+
     return warnings
+
 
 # Run validation on import
 _ENV_WARNINGS = validate_environment()

@@ -30,6 +30,7 @@ lacked:
     has the larger absolute runoff deficit relative to the reference storm.
     A scalar multiplier could not express either behaviour.
 """
+
 from __future__ import annotations
 
 import logging
@@ -146,7 +147,11 @@ def build_routed_basis(aligned_dir: Optional[Path] = None):
     LOGGER.info("Building the routed runoff basis for the fluvial hazard...")
     pm = PluvialModel.build(aligned_dir=aligned_dir)
     basis = reproject_basis_to_grid(
-        pm.basis, pm.profile, master["transform"], master["crs"], shape,
+        pm.basis,
+        pm.profile,
+        master["transform"],
+        master["crs"],
+        shape,
     )
 
     _, district = read_raster("lulc", aligned_dir=aligned_dir)
@@ -215,8 +220,8 @@ def generate_hazard_rasters(
     # second scenario crashed rather than silently producing a wrong raster.
     routing_basis = routing_classes = routing_cell_area_m2 = district_mask = None
     if routed:
-        routing_basis, routing_classes, routing_cell_area_m2, district_mask = (
-            build_routed_basis(aligned_dir)
+        routing_basis, routing_classes, routing_cell_area_m2, district_mask = build_routed_basis(
+            aligned_dir
         )
 
     written = {}
@@ -225,9 +230,20 @@ def generate_hazard_rasters(
         if routed:
             from pluvial import routed_runoff_ratio
 
+            # Not just a type-checker appeasement: this is the actual
+            # invariant the `if routed:` blocks above are relying on, made
+            # explicit and checked at runtime instead of merely assumed.
+            assert routing_basis is not None
+            assert routing_classes is not None
+            assert routing_cell_area_m2 is not None
+            assert district_mask is not None
             ratio = routed_runoff_ratio(
-                routing_basis, routing_classes, float(mm), RAINFALL.reference_event_mm,
-                routing_cell_area_m2, district_mask,
+                routing_basis,
+                routing_classes,
+                float(mm),
+                RAINFALL.reference_event_mm,
+                routing_cell_area_m2,
+                district_mask,
             )
         hazard = combine(susc, cn, float(mm), runoff_ratio=ratio)
         out = np.where(np.isfinite(hazard), hazard, NODATA).astype(np.float32)
@@ -296,9 +312,7 @@ def blend_scenarios(maps: Dict[float, np.ndarray], rainfall_mm: float) -> Option
 
     valid = (a > -9000) & (b > -9000)
     out = np.full(a.shape, NODATA, dtype=np.float32)
-    out[valid] = sigmoid(
-        (1.0 - w) * logit(a[valid]) + w * logit(b[valid])
-    ).astype(np.float32)
+    out[valid] = sigmoid((1.0 - w) * logit(a[valid]) + w * logit(b[valid])).astype(np.float32)
     return out
 
 

@@ -5,7 +5,7 @@ Only the offline parts: tile arithmetic, the terrarium decode and the validity
 band. Fetching needs the network. Routing on this DEM is not tested because it
 is not finished -- see the module docstring.
 """
-import numpy as np
+
 import pytest
 
 from upstream_dem import (

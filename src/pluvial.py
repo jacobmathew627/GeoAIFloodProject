@@ -71,6 +71,7 @@ seven multiply-adds over the grid -- milliseconds, exact, no approximation.
 That is what makes the slider live rather than an interpolation between
 pre-rendered scenarios.
 """
+
 from __future__ import annotations
 
 import heapq
@@ -143,8 +144,7 @@ def fill_depressions(elev: np.ndarray, valid: np.ndarray) -> np.ndarray:
 
     LOGGER.info("  priority-flood from %d seed cells...", len(heap))
     push, pop = heapq.heappush, heapq.heappop
-    neighbours = ((-1, 0), (1, 0), (0, -1), (0, 1),
-                  (-1, -1), (-1, 1), (1, -1), (1, 1))
+    neighbours = ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1))
 
     while heap:
         level, r, c = pop(heap)
@@ -198,8 +198,7 @@ def build_runoff_basis(net, lulc_route: np.ndarray) -> Tuple[Dict[int, np.ndarra
     computed once and reused for every rainfall value.
     """
     classes = sorted(
-        int(c) for c in np.unique(lulc_route[np.isfinite(lulc_route)])
-        if 1 <= int(c) <= 11
+        int(c) for c in np.unique(lulc_route[np.isfinite(lulc_route)]) if 1 <= int(c) <= 11
     )
     basis = {}
     for k in classes:
@@ -207,7 +206,9 @@ def build_runoff_basis(net, lulc_route: np.ndarray) -> Tuple[Dict[int, np.ndarra
         basis[k] = net.accumulate(weight)
         LOGGER.info(
             "  class %2d: %8d cells, max upstream count %.0f",
-            k, int(weight.sum()), np.nanmax(basis[k]),
+            k,
+            int(weight.sum()),
+            np.nanmax(basis[k]),
         )
     return basis, np.array(classes)
 
@@ -318,10 +319,15 @@ def reproject_basis_to_grid(
     for k, n_k in basis.items():
         dst = np.full(dst_shape, np.nan, dtype=np.float32)
         reproject(
-            source=np.nan_to_num(n_k, nan=0.0).astype(np.float32), destination=dst,
-            src_transform=src_profile["transform"], src_crs=src_profile["crs"],
-            dst_transform=dst_transform, dst_crs=dst_crs,
-            resampling=Resampling.average, src_nodata=np.nan, dst_nodata=np.nan,
+            source=np.nan_to_num(n_k, nan=0.0).astype(np.float32),
+            destination=dst,
+            src_transform=src_profile["transform"],
+            src_crs=src_profile["crs"],
+            dst_transform=dst_transform,
+            dst_crs=dst_crs,
+            resampling=Resampling.average,
+            src_nodata=np.nan,
+            dst_nodata=np.nan,
         )
         out[int(k)] = np.nan_to_num(dst, nan=0.0)
     return out
@@ -375,9 +381,13 @@ class PluvialModel:
             reproject(
                 source=np.where(ok, values, np.nan).astype(np.float32),
                 destination=out,
-                src_transform=master["transform"], src_crs=master["crs"],
-                dst_transform=net.profile["transform"], dst_crs=net.profile["crs"],
-                resampling=resampling, src_nodata=np.nan, dst_nodata=np.nan,
+                src_transform=master["transform"],
+                src_crs=master["crs"],
+                dst_transform=net.profile["transform"],
+                dst_crs=net.profile["crs"],
+                resampling=resampling,
+                src_nodata=np.nan,
+                dst_nodata=np.nan,
             )
             return out
 
@@ -396,8 +406,12 @@ class PluvialModel:
 
         transform = net.profile["transform"]
         model = cls(
-            basis=basis, classes=classes, tan_slope=tan_slope, valid=net.valid,
-            cell_area_m2=net.cell_area_m2, cell_width_m=abs(transform.a),
+            basis=basis,
+            classes=classes,
+            tan_slope=tan_slope,
+            valid=net.valid,
+            cell_area_m2=net.cell_area_m2,
+            cell_width_m=abs(transform.a),
         )
         model.profile = net.profile
         model.master_profile = master
@@ -407,7 +421,11 @@ class PluvialModel:
     def routed_runoff_m3(self, rainfall_mm: float) -> np.ndarray:
         """Runoff volume draining through each cell, in cubic metres."""
         return routed_runoff_volume_m3(
-            self.basis, self.classes, rainfall_mm, self.cell_area_m2, self.valid,
+            self.basis,
+            self.classes,
+            rainfall_mm,
+            self.cell_area_m2,
+            self.valid,
         )
 
     def dynamic_wetness(self, rainfall_mm: float) -> np.ndarray:

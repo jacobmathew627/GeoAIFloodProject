@@ -6,6 +6,7 @@ tested here is the estimator itself, on synthetic surfaces where the right
 answer is known by construction, plus the identifiability argument that
 motivates the whole module.
 """
+
 import numpy as np
 import pytest
 
@@ -86,18 +87,29 @@ class TestFit:
         s, cn = surface
         truth = 2.4
         events = [
-            {"event": "a", "rainfall_mm": 412.5,
-             "observed_km2": expected_area_km2(s, cn, 412.5, truth)},
-            {"event": "b", "rainfall_mm": 173.7,
-             "observed_km2": expected_area_km2(s, cn, 173.7, truth)},
+            {
+                "event": "a",
+                "rainfall_mm": 412.5,
+                "observed_km2": expected_area_km2(s, cn, 412.5, truth),
+            },
+            {
+                "event": "b",
+                "rainfall_mm": 173.7,
+                "observed_km2": expected_area_km2(s, cn, 173.7, truth),
+            },
         ]
         assert fit((s, cn), events) == pytest.approx(truth, abs=0.02)
 
     @pytest.mark.parametrize("truth", [0.5, 1.8, 3.6, 6.0])
     def test_recovers_across_the_bracket(self, surface, truth):
         s, cn = surface
-        events = [{"event": "x", "rainfall_mm": 173.7,
-                   "observed_km2": expected_area_km2(s, cn, 173.7, truth)}]
+        events = [
+            {
+                "event": "x",
+                "rainfall_mm": 173.7,
+                "observed_km2": expected_area_km2(s, cn, 173.7, truth),
+            }
+        ]
         assert fit((s, cn), events) == pytest.approx(truth, abs=0.05)
 
     def test_result_is_inside_the_bracket(self, surface):
@@ -116,8 +128,9 @@ class TestFit:
         """
         s, cn = surface
         ref = RAINFALL.reference_event_mm
-        events = [{"event": "ref", "rainfall_mm": ref,
-                   "observed_km2": expected_area_km2(s, cn, ref, 1.8)}]
+        events = [
+            {"event": "ref", "rainfall_mm": ref, "observed_km2": expected_area_km2(s, cn, ref, 1.8)}
+        ]
         beta = fit((s, cn), events)
         losses = [
             abs(expected_area_km2(s, cn, ref, b) - events[0]["observed_km2"])
@@ -189,10 +202,13 @@ class TestLossUsesPrecomputedRatioWhenPresent:
         s, cn = surface
         # A ratio engineered to be very different from whatever the pointwise
         # curve-number computation would give at this rainfall.
-        events_with_ratio = [{
-            "rainfall_mm": 200.0, "observed_km2": 1.0,
-            "ratio": np.full_like(s, 50.0),
-        }]
+        events_with_ratio = [
+            {
+                "rainfall_mm": 200.0,
+                "observed_km2": 1.0,
+                "ratio": np.full_like(s, 50.0),
+            }
+        ]
         events_pointwise = [{"rainfall_mm": 200.0, "observed_km2": 1.0}]
         loss_ratio = _loss(2.0, (s, cn), events_with_ratio)
         loss_pointwise = _loss(2.0, (s, cn), events_pointwise)

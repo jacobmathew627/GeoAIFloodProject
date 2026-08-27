@@ -10,9 +10,9 @@ change-detection thresholds, which is where a transcription mistake would
 actually cost something (a wrong date silently changes which storm gets
 measured; nothing would visibly break).
 """
+
 from datetime import date
 
-import pytest
 
 from acquire_flood_event import (
     EVENTS,
@@ -85,9 +85,7 @@ class TestEventWindows:
         for year, windows in by_year.items():
             if len(windows) < 2:
                 continue
-            spans = sorted(
-                (_parse(w["baseline"][0]), _parse(w["event"][1])) for w in windows
-            )
+            spans = sorted((_parse(w["baseline"][0]), _parse(w["event"][1])) for w in windows)
             for (s1, e1), (s2, e2) in zip(spans, spans[1:]):
                 assert e1 < s2, year
 

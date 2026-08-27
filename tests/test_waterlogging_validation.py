@@ -4,6 +4,7 @@ Tests for the documented-hotspot validation.
 Offline parts only: geocoding needs the network. The statistics and the
 hotspot table are what carry the claim, so those are pinned.
 """
+
 import numpy as np
 import pytest
 

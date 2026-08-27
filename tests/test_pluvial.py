@@ -10,6 +10,7 @@ copies embedded in each caller. This file does not cover PluvialModel.build()
 or fill_depressions(), which need a real DEM on disk; the pre-existing
 project gap in test coverage there is not this file's job to close.
 """
+
 import numpy as np
 import pytest
 
@@ -133,7 +134,6 @@ class TestReprojectBasisToGrid:
         *count* is a density-like quantity, and downsampling with 'average'
         must not invent or destroy contribution.
         """
-        import rasterio
         from rasterio.transform import from_origin
 
         src_transform = from_origin(0, 100, 10.0, 10.0)  # 10 m cells
@@ -143,7 +143,11 @@ class TestReprojectBasisToGrid:
         # Same footprint, coarser cells (20 m instead of 10 m).
         dst_transform = from_origin(0, 100, 20.0, 20.0)
         out = reproject_basis_to_grid(
-            {1: n_k}, src_profile, dst_transform, "EPSG:32643", (5, 5),
+            {1: n_k},
+            src_profile,
+            dst_transform,
+            "EPSG:32643",
+            (5, 5),
         )
         assert out[1].shape == (5, 5)
         # Every source cell was 5.0; a same-value field must resample to the
@@ -151,7 +155,6 @@ class TestReprojectBasisToGrid:
         assert np.allclose(out[1], 5.0, atol=0.5)
 
     def test_output_has_no_nan_after_nan_to_num(self):
-        import rasterio
         from rasterio.transform import from_origin
 
         src_transform = from_origin(0, 100, 10.0, 10.0)
@@ -159,7 +162,11 @@ class TestReprojectBasisToGrid:
         n_k[0:5, 0:5] = 3.0
         src_profile = {"transform": src_transform, "crs": "EPSG:32643"}
         out = reproject_basis_to_grid(
-            {1: n_k}, src_profile, src_transform, "EPSG:32643", (10, 10),
+            {1: n_k},
+            src_profile,
+            src_transform,
+            "EPSG:32643",
+            (10, 10),
         )
         assert np.isfinite(out[1]).all()
 

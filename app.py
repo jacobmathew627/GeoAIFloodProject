@@ -5,6 +5,7 @@ The two model layers are computed live: moving the rainfall slider re-evaluates
 the model at that depth (~60 ms) rather than interpolating between pre-rendered
 scenario rasters.
 """
+
 import atexit
 import logging
 import os
@@ -127,8 +128,7 @@ is_2018 = controls["is_2018"]
 if is_2018:
     rainfall = RAINFALL.reference_event_mm
     st.sidebar.error(
-        f"Simulating the August 2018 event: {rainfall:.0f} mm "
-        "(ERA5 3-day maximum, 14-16 Aug)"
+        f"Simulating the August 2018 event: {rainfall:.0f} mm " "(ERA5 3-day maximum, 14-16 Aug)"
     )
 
 # ──────────────────────────────────────────────
@@ -149,8 +149,10 @@ if layer_type in LIVE_LAYERS:
             else:
                 data = live_model.pluvial_index(grid, rainfall)
         meta = {
-            "bounds": grid.bounds, "crs": grid.crs,
-            "transform": grid.transform, "nodata": np.nan,
+            "bounds": grid.bounds,
+            "crs": grid.crs,
+            "transform": grid.transform,
+            "nodata": np.nan,
         }
     except FileNotFoundError as exc:
         st.error(
@@ -228,8 +230,10 @@ if data is not None and meta is not None:
 
     m.get_root().html.add_child(folium.Element(create_legend_html(title, legend_items)))
     folium.raster_layers.ImageOverlay(
-        image=_write_overlay_png(image_rgba), bounds=image_bounds,
-        opacity=0.7, name=layer_type,
+        image=_write_overlay_png(image_rgba),
+        bounds=image_bounds,
+        opacity=0.7,
+        name=layer_type,
     ).add_to(m)
     folium.LayerControl().add_to(m)
 

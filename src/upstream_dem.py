@@ -56,6 +56,7 @@ only within the district and cannot see water entering from upstream.
 
 Run:  python src/upstream_dem.py --build
 """
+
 from __future__ import annotations
 
 import argparse
@@ -93,7 +94,7 @@ MAX_VALID_ELEV_M = 2800.0
 # Web-mercator tile arithmetic
 # ──────────────────────────────────────────────
 def deg2tile(lon: float, lat: float, z: int) -> Tuple[int, int]:
-    n = 2 ** z
+    n = 2**z
     x = int((lon + 180.0) / 360.0 * n)
     lat_rad = math.radians(lat)
     y = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
@@ -102,15 +103,15 @@ def deg2tile(lon: float, lat: float, z: int) -> Tuple[int, int]:
 
 def tile2deg(x: int, y: int, z: int) -> Tuple[float, float]:
     """North-west corner of a tile."""
-    n = 2 ** z
+    n = 2**z
     lon = x / n * 360.0 - 180.0
     lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))
     return lon, lat
 
 
 def tile_range(bbox, z: int):
-    x0, y0 = deg2tile(bbox[0], bbox[3], z)   # NW
-    x1, y1 = deg2tile(bbox[2], bbox[1], z)   # SE
+    x0, y0 = deg2tile(bbox[0], bbox[3], z)  # NW
+    x1, y1 = deg2tile(bbox[2], bbox[1], z)  # SE
     return range(min(x0, x1), max(x0, x1) + 1), range(min(y0, y1), max(y0, y1) + 1)
 
 
@@ -153,7 +154,11 @@ def fetch_mosaic(bbox=BASIN_BBOX, zoom: int = DEFAULT_ZOOM, workers: int = 8):
     jobs = [(x, y, zoom) for y in ys for x in xs]
     LOGGER.info(
         "Fetching %d tiles at zoom %d (%d x %d) over %s...",
-        len(jobs), zoom, len(xs), len(ys), bbox,
+        len(jobs),
+        zoom,
+        len(xs),
+        len(ys),
+        bbox,
     )
 
     tile_px = 256
@@ -170,7 +175,7 @@ def fetch_mosaic(bbox=BASIN_BBOX, zoom: int = DEFAULT_ZOOM, workers: int = 8):
                 continue
             r = (y - y0) * tile_px
             c = (x - x0) * tile_px
-            mosaic[r:r + tile_px, c:c + tile_px] = elev
+            mosaic[r : r + tile_px, c : c + tile_px] = elev
 
     # Geographic bounds of the assembled mosaic (web-mercator tile grid, but
     # the tiles are square in mercator so the mosaic is a mercator raster).
@@ -187,7 +192,9 @@ def fetch_mosaic(bbox=BASIN_BBOX, zoom: int = DEFAULT_ZOOM, workers: int = 8):
     transform = from_bounds(left, bottom, right, top, mosaic.shape[1], mosaic.shape[0])
     LOGGER.info(
         "  mosaic %s, elevation range [%.0f, %.0f] m",
-        mosaic.shape, np.nanmin(mosaic), np.nanmax(mosaic),
+        mosaic.shape,
+        np.nanmin(mosaic),
+        np.nanmax(mosaic),
     )
     return mosaic, transform, "EPSG:3857"
 
@@ -216,19 +223,29 @@ def build(
     bottom = top + src_transform.e * mosaic.shape[0]
 
     dst_transform, width, height = calculate_default_transform(
-        src_crs, dst_crs, mosaic.shape[1], mosaic.shape[0],
-        left=left, bottom=bottom, right=right, top=top,
+        src_crs,
+        dst_crs,
+        mosaic.shape[1],
+        mosaic.shape[0],
+        left=left,
+        bottom=bottom,
+        right=right,
+        top=top,
         resolution=resolution_m,
     )
 
     LOGGER.info("Reprojecting to %s at %.0f m -> %d x %d", dst_crs, resolution_m, height, width)
     dst = np.full((height, width), np.nan, dtype=np.float32)
     reproject(
-        source=mosaic, destination=dst,
-        src_transform=src_transform, src_crs=src_crs,
-        dst_transform=dst_transform, dst_crs=dst_crs,
+        source=mosaic,
+        destination=dst,
+        src_transform=src_transform,
+        src_crs=src_crs,
+        dst_transform=dst_transform,
+        dst_crs=dst_crs,
         resampling=Resampling.bilinear,
-        src_nodata=np.nan, dst_nodata=np.nan,
+        src_nodata=np.nan,
+        dst_nodata=np.nan,
     )
 
     # Terrarium carries ocean *bathymetry*, not zeros: an Arabian Sea tile
@@ -242,15 +259,24 @@ def build(
     # spurious peak would divert the flow network around it.
     spikes = np.isfinite(dst) & (dst > MAX_VALID_ELEV_M)
     if spikes.any():
-        LOGGER.info("  removing %d elevation spikes above %.0f m",
-                    int(spikes.sum()), MAX_VALID_ELEV_M)
+        LOGGER.info(
+            "  removing %d elevation spikes above %.0f m", int(spikes.sum()), MAX_VALID_ELEV_M
+        )
         dst = np.where(spikes, np.nan, dst)
 
     profile = {
-        "driver": "GTiff", "height": height, "width": width, "count": 1,
-        "dtype": "float32", "crs": dst_crs, "transform": dst_transform,
-        "nodata": RASTER.nodata_value, "compress": "lzw", "tiled": True,
-        "blockxsize": 256, "blockysize": 256,
+        "driver": "GTiff",
+        "height": height,
+        "width": width,
+        "count": 1,
+        "dtype": "float32",
+        "crs": dst_crs,
+        "transform": dst_transform,
+        "nodata": RASTER.nodata_value,
+        "compress": "lzw",
+        "tiled": True,
+        "blockxsize": 256,
+        "blockysize": 256,
     }
     out_path = out_dir / OUTPUT_NAME
     with rasterio.open(out_path, "w", **profile) as f:
@@ -259,8 +285,10 @@ def build(
     valid = np.isfinite(dst)
     LOGGER.info(
         "Wrote %s: %.0f km2 of land, elevation [%.0f, %.0f] m",
-        out_path, valid.sum() * resolution_m ** 2 / 1e6,
-        np.nanmin(dst), np.nanmax(dst),
+        out_path,
+        valid.sum() * resolution_m**2 / 1e6,
+        np.nanmin(dst),
+        np.nanmax(dst),
     )
     return out_path
 
@@ -279,7 +307,10 @@ def main() -> None:  # pragma: no cover
         xs, ys = tile_range(BASIN_BBOX, args.zoom)
         LOGGER.info(
             "Would fetch %d tiles at zoom %d (%d x %d)",
-            len(xs) * len(ys), args.zoom, len(xs), len(ys),
+            len(xs) * len(ys),
+            args.zoom,
+            len(xs),
+            len(ys),
         )
 
 

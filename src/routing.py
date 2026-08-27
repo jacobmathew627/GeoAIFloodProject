@@ -27,6 +27,7 @@ which is the correct grid for it: routing on the 10 m master grid would be
 four times the work for no extra hydrological information, since the DEM it
 derives from is 30 m anyway.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,9 +51,14 @@ FILLED_DEM = "Ernakulam_Filled_DEM.tif"
 # cell widths. Diagonals are sqrt(2) further away, which matters: without the
 # distance weighting the steepest-descent choice is biased toward diagonals.
 _D8 = [
-    (-1, 0, 1.0), (1, 0, 1.0), (0, -1, 1.0), (0, 1, 1.0),
-    (-1, -1, np.sqrt(2)), (-1, 1, np.sqrt(2)),
-    (1, -1, np.sqrt(2)), (1, 1, np.sqrt(2)),
+    (-1, 0, 1.0),
+    (1, 0, 1.0),
+    (0, -1, 1.0),
+    (0, 1, 1.0),
+    (-1, -1, np.sqrt(2)),
+    (-1, 1, np.sqrt(2)),
+    (1, -1, np.sqrt(2)),
+    (1, 1, np.sqrt(2)),
 ]
 
 
@@ -81,7 +87,10 @@ def load_filled_dem(geoai_dir: Optional[Path] = None) -> Tuple[np.ndarray, np.nd
 
     LOGGER.info(
         "Filled DEM %s: %.2fM valid cells, range [%.2f, %.2f] m",
-        elev.shape, valid.sum() / 1e6, np.nanmin(elev), np.nanmax(elev),
+        elev.shape,
+        valid.sum() / 1e6,
+        np.nanmin(elev),
+        np.nanmax(elev),
     )
     return elev, valid, profile
 
@@ -170,7 +179,8 @@ def d8_receivers(
 
             LOGGER.info(
                 "  flat resolution applied to %d cells (%.1f%% of valid)",
-                n_unresolved, 100 * n_unresolved / max(valid.sum(), 1),
+                n_unresolved,
+                100 * n_unresolved / max(valid.sum(), 1),
             )
 
     receiver[~valid] = flat_idx[~valid]
@@ -278,7 +288,8 @@ def _load_flow_accumulation(
     if acc.shape != shape:
         LOGGER.warning(
             "Flow accumulation shape %s != DEM %s; flats will not be resolved",
-            acc.shape, shape,
+            acc.shape,
+            shape,
         )
         return None
 
@@ -309,7 +320,8 @@ class FlowNetwork:
         pits = int(np.sum(self.receiver[valid_flat] == valid_flat))
         LOGGER.info(
             "Flow network ready: %.2fM cells, %d terminal cells (pits/outlets)",
-            self.valid.sum() / 1e6, pits,
+            self.valid.sum() / 1e6,
+            pits,
         )
 
     @property
@@ -325,6 +337,4 @@ class FlowNetwork:
 
     def contributing_area_m2(self) -> np.ndarray:
         """Upslope contributing area. Used to validate against the shipped raster."""
-        return self.accumulate(
-            np.full(self.elev.shape, self.cell_area_m2, dtype=np.float32)
-        )
+        return self.accumulate(np.full(self.elev.shape, self.cell_area_m2, dtype=np.float32))

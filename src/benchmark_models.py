@@ -13,13 +13,13 @@ ROC and PR curves are computed from its own predictions.
 
 Run:  python src/benchmark_models.py
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import logging
-from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 import numpy as np
 
@@ -30,8 +30,17 @@ from susceptibility import spatial_blocks
 LOGGER = logging.getLogger("geoai_flood")
 
 
-def build_models(seed: int = 0) -> Dict[str, object]:
-    """The baseline family, all on identical features."""
+def build_models(seed: int = 0) -> Dict[str, Any]:
+    """
+    The baseline family, all on identical features.
+
+    Any, not object: this dict holds heterogeneous sklearn pipeline/estimator
+    instances, and every caller immediately calls .fit()/.predict_proba() on
+    the values it retrieves. object was technically more precise but made
+    mypy unable to verify those calls at every call site for no real benefit
+    -- there is no meaningful shared interface to type these against short of
+    a Protocol, which would be more code than the problem warrants here.
+    """
     from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
     from sklearn.linear_model import LogisticRegression
     from sklearn.naive_bayes import GaussianNB
@@ -53,7 +62,9 @@ def build_models(seed: int = 0) -> Dict[str, object]:
         "MLP (2x64)": make_pipeline(
             StandardScaler(),
             MLPClassifier(
-                hidden_layer_sizes=(64, 64), max_iter=400, early_stopping=True,
+                hidden_layer_sizes=(64, 64),
+                max_iter=400,
+                early_stopping=True,
                 random_state=seed,
             ),
         ),
@@ -61,9 +72,15 @@ def build_models(seed: int = 0) -> Dict[str, object]:
             n_estimators=300, min_samples_leaf=5, n_jobs=-1, random_state=seed
         ),
         "Gradient Boosting (ours)": HistGradientBoostingClassifier(
-            max_iter=400, learning_rate=0.06, max_leaf_nodes=31, min_samples_leaf=50,
-            l2_regularization=1.0, early_stopping=True, validation_fraction=0.15,
-            n_iter_no_change=25, random_state=seed,
+            max_iter=400,
+            learning_rate=0.06,
+            max_leaf_nodes=31,
+            min_samples_leaf=50,
+            l2_regularization=1.0,
+            early_stopping=True,
+            validation_fraction=0.15,
+            n_iter_no_change=25,
+            random_state=seed,
         ),
     }
 
@@ -95,7 +112,10 @@ def run(n_per_class: int = 60_000, seed: int = 42, n_splits: int = 5) -> Dict:
     groups = spatial_blocks(sample["row"], sample["col"])
     LOGGER.info(
         "Benchmark set: %d samples, %d features, %.1f%% positive, %d blocks",
-        X.shape[0], X.shape[1], 100 * y.mean(), len(np.unique(groups)),
+        X.shape[0],
+        X.shape[1],
+        100 * y.mean(),
+        len(np.unique(groups)),
     )
 
     results = {}
@@ -109,9 +129,9 @@ def run(n_per_class: int = 60_000, seed: int = 42, n_splits: int = 5) -> Dict:
             m.fit(X[tr], y[tr])
             oof_spatial[te] = _scores(m, X[te])
 
-        for tr, te in StratifiedKFold(
-            n_splits=n_splits, shuffle=True, random_state=seed
-        ).split(X, y):
+        for tr, te in StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed).split(
+            X, y
+        ):
             m = build_models(seed)[name]
             m.fit(X[tr], y[tr])
             oof_random[te] = _scores(m, X[te])
@@ -142,8 +162,11 @@ def run(n_per_class: int = 60_000, seed: int = 42, n_splits: int = 5) -> Dict:
         r = results[name]
         LOGGER.info(
             "  %-24s spatial AUC=%.4f  random AUC=%.4f  (inflation %+.4f)  F1=%.3f",
-            name, r["spatial_auc_roc"], r["random_auc_roc"],
-            r["random_auc_roc"] - r["spatial_auc_roc"], r["f1"],
+            name,
+            r["spatial_auc_roc"],
+            r["random_auc_roc"],
+            r["random_auc_roc"] - r["spatial_auc_roc"],
+            r["f1"],
         )
 
     payload = {

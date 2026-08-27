@@ -47,6 +47,7 @@ IMPORTANT: calibrate on a uniform sample of the district, not on the balanced
 training set. The guarantee only transfers to pixels exchangeable with the
 calibration data, and the training set is deliberately not representative.
 """
+
 from __future__ import annotations
 
 import logging
@@ -61,6 +62,7 @@ LOGGER = logging.getLogger("geoai_flood")
 @dataclass
 class ConformalThresholds:
     """Probability thresholds defining the prediction sets."""
+
     alpha: float
     q: float
     include_positive_above: float  # p >= this -> "flood" is in the set
@@ -115,9 +117,7 @@ def fit(p: np.ndarray, y: np.ndarray, alpha: float = 0.10) -> ConformalThreshold
     )
 
 
-def fit_mondrian(
-    p: np.ndarray, y: np.ndarray, alpha: float = 0.10
-) -> ConformalThresholds:
+def fit_mondrian(p: np.ndarray, y: np.ndarray, alpha: float = 0.10) -> ConformalThresholds:
     """
     Class-conditional (Mondrian) conformal calibration.
 
@@ -151,7 +151,7 @@ def fit_mondrian(
         return float(np.quantile(scores, level, method="higher"))
 
     q_pos = _quantile(1.0 - p[y == 1])  # withheld probability on true floods
-    q_neg = _quantile(p[y == 0])        # withheld probability on true dry land
+    q_neg = _quantile(p[y == 0])  # withheld probability on true dry land
 
     return ConformalThresholds(
         alpha=float(alpha),
@@ -256,13 +256,15 @@ def conditional_coverage(
         m = (p >= lo) & (p < hi) if hi < edges[-1] else (p >= lo) & (p <= hi)
         if m.sum() == 0:
             continue
-        rows.append({
-            "p_low": float(lo),
-            "p_high": float(hi),
-            "n": int(m.sum()),
-            "positives": int(y[m].sum()),
-            "coverage": float(covered[m].mean()),
-        })
+        rows.append(
+            {
+                "p_low": float(lo),
+                "p_high": float(hi),
+                "n": int(m.sum()),
+                "positives": int(y[m].sum()),
+                "coverage": float(covered[m].mean()),
+            }
+        )
     return rows
 
 
@@ -282,7 +284,9 @@ def report(
     log.info("Conformal prediction (%s)", t)
     log.info(
         "  marginal coverage %.4f (target %.2f) | mean set size %.3f",
-        marginal, 1 - t.alpha, size,
+        marginal,
+        1 - t.alpha,
+        size,
     )
     for name, value in per_class.items():
         flag = "" if value >= 1 - t.alpha else "   <- BELOW TARGET"
@@ -293,7 +297,12 @@ def report(
         flag = "" if row["coverage"] >= 1 - t.alpha else "   <- BELOW TARGET"
         log.info(
             "    p in [%.5f, %.5f): coverage %.3f  (n=%d, %d positive)%s",
-            row["p_low"], row["p_high"], row["coverage"], row["n"], row["positives"], flag,
+            row["p_low"],
+            row["p_high"],
+            row["coverage"],
+            row["n"],
+            row["positives"],
+            flag,
         )
 
     return {

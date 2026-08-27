@@ -35,6 +35,7 @@ Run:
     python src/rainfall_forecast.py --train
     python src/rainfall_forecast.py --predict-latest
 """
+
 from __future__ import annotations
 
 import argparse
@@ -85,9 +86,7 @@ def load_series(
     cache_dir = cache_dir or CACHE_DIR
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    data = imd.get_data(
-        "rain", start_year, end_year, fn_format="yearwise", file_dir=str(cache_dir)
-    )
+    data = imd.get_data("rain", start_year, end_year, fn_format="yearwise", file_dir=str(cache_dir))
     ds = data.get_xarray().sel(lat=slice(*LAT), lon=slice(*LON))
 
     values = ds["rain"].values.astype(float)
@@ -99,8 +98,12 @@ def load_series(
     ok = np.isfinite(daily)
     LOGGER.info(
         "IMD series %s..%s: %d days, %d usable, mean %.2f mm/day, max %.1f mm",
-        dates[0], dates[-1], daily.size, int(ok.sum()),
-        np.nanmean(daily), np.nanmax(daily),
+        dates[0],
+        dates[-1],
+        daily.size,
+        int(ok.sum()),
+        np.nanmean(daily),
+        np.nanmax(daily),
     )
     return dates[ok], daily[ok]
 
@@ -109,10 +112,19 @@ def load_series(
 # Features
 # ──────────────────────────────────────────────
 FEATURE_NAMES = [
-    "rain_t", "rain_t1", "rain_t2",
-    "sum_3d", "sum_7d", "sum_15d", "sum_30d",
-    "wet_days_7d", "max_1d_7d",
-    "doy_sin1", "doy_cos1", "doy_sin2", "doy_cos2",
+    "rain_t",
+    "rain_t1",
+    "rain_t2",
+    "sum_3d",
+    "sum_7d",
+    "sum_15d",
+    "sum_30d",
+    "wet_days_7d",
+    "max_1d_7d",
+    "doy_sin1",
+    "doy_cos1",
+    "doy_sin2",
+    "doy_cos2",
 ]
 
 
@@ -132,15 +144,26 @@ def build_features(
     ).astype(int) + 1
 
     for t in range(lookback, n - horizon):
-        window = rain[t - lookback + 1: t + 1]
+        window = rain[t - lookback + 1 : t + 1]
         angle = 2.0 * np.pi * doy[t] / 365.25
-        rows.append([
-            rain[t], rain[t - 1], rain[t - 2],
-            window[-3:].sum(), window[-7:].sum(), window[-15:].sum(), window.sum(),
-            float((window[-7:] > 1.0).sum()), float(window[-7:].max()),
-            np.sin(angle), np.cos(angle), np.sin(2 * angle), np.cos(2 * angle),
-        ])
-        targets.append(rain[t + 1: t + 1 + horizon].sum())
+        rows.append(
+            [
+                rain[t],
+                rain[t - 1],
+                rain[t - 2],
+                window[-3:].sum(),
+                window[-7:].sum(),
+                window[-15:].sum(),
+                window.sum(),
+                float((window[-7:] > 1.0).sum()),
+                float(window[-7:].max()),
+                np.sin(angle),
+                np.cos(angle),
+                np.sin(2 * angle),
+                np.cos(2 * angle),
+            ]
+        )
+        targets.append(rain[t + 1 : t + 1 + horizon].sum())
         stamps.append(dates[t])
 
     return (
@@ -167,6 +190,7 @@ def climatology_baseline(
     In a monsoon climate this is a strong baseline and beating it is the real
     test of whether a model has learned anything beyond the calendar.
     """
+
     def doy_of(d):
         return (
             d.astype("datetime64[D]") - d.astype("datetime64[Y]").astype("datetime64[D]")
@@ -208,15 +232,24 @@ def train(
     test_mask = ~train_mask
     LOGGER.info(
         "train %d samples (%d..%d), test %d samples (%d..%d)",
-        train_mask.sum(), years[train_mask].min(), years[train_mask].max(),
-        test_mask.sum(), years[test_mask].min(), years[test_mask].max(),
+        train_mask.sum(),
+        years[train_mask].min(),
+        years[train_mask].max(),
+        test_mask.sum(),
+        years[test_mask].min(),
+        years[test_mask].max(),
     )
 
     model = HistGradientBoostingRegressor(
-        max_iter=400, learning_rate=0.05, max_leaf_nodes=31,
-        min_samples_leaf=40, l2_regularization=1.0,
-        early_stopping=True, validation_fraction=0.15,
-        n_iter_no_change=30, random_state=0,
+        max_iter=400,
+        learning_rate=0.05,
+        max_leaf_nodes=31,
+        min_samples_leaf=40,
+        l2_regularization=1.0,
+        early_stopping=True,
+        validation_fraction=0.15,
+        n_iter_no_change=30,
+        random_state=0,
     )
     model.fit(X[train_mask], y[train_mask])
 
@@ -245,7 +278,10 @@ def train(
         s = result[name]
         LOGGER.info(
             "  %-12s MAE %6.2f mm   RMSE %6.2f mm   r %.3f",
-            name, s["mae"], s["rmse"], s["corr"],
+            name,
+            s["mae"],
+            s["rmse"],
+            s["corr"],
         )
     skill = 1.0 - result["model"]["mae"] / result["climatology"]["mae"]
     skill_p = 1.0 - result["model"]["mae"] / result["persistence"]["mae"]
@@ -273,8 +309,12 @@ def train(
         result["exceedance"][str(int(thr))] = entry
         LOGGER.info(
             "    >= %5.0f mm (%3d events, %.2f%%): AUC model %.3f | persistence %.3f | climatology %.3f",
-            thr, entry["n_events"], 100 * entry["base_rate"],
-            entry["auc_model"], entry["auc_persistence"], entry["auc_climatology"],
+            thr,
+            entry["n_events"],
+            100 * entry["base_rate"],
+            entry["auc_model"],
+            entry["auc_persistence"],
+            entry["auc_climatology"],
         )
 
     metadata = {
@@ -313,9 +353,7 @@ def load_model(model_dir: Optional[Path] = None):
     model_dir = model_dir or MODELS_DIR
     path = model_dir / MODEL_NAME
     if not path.exists():
-        raise FileNotFoundError(
-            f"{path} not found. Run `python src/rainfall_forecast.py --train`."
-        )
+        raise FileNotFoundError(f"{path} not found. Run `python src/rainfall_forecast.py --train`.")
     bundle = joblib.load(path)
     return bundle["model"], bundle["metadata"]
 

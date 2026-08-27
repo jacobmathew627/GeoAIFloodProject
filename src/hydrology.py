@@ -20,6 +20,7 @@ type and hydrologic soil group.
 Woodward et al. (2003), "Runoff Curve Number Method: Examination of the
 Initial Abstraction Ratio" -- the basis for the lambda = 0.05 formulation.
 """
+
 from __future__ import annotations
 
 import logging

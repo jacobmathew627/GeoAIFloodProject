@@ -26,6 +26,7 @@ Caveats worth carrying:
     should be the burst itself (3-day max), not a 5- or 7-day accumulation,
     or the antecedent wetness is counted twice.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,7 +34,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -72,14 +73,16 @@ def sample_grid(box: Dict, n: int = 3) -> List[Tuple[float, float]]:
 
 def fetch_daily(points, start: str, end: str, timeout: int = 90):
     """Daily precipitation for each point. Returns (dates, array[points, days])."""
-    query = urllib.parse.urlencode({
-        "latitude": ",".join(f"{la:.4f}" for la, _ in points),
-        "longitude": ",".join(f"{lo:.4f}" for _, lo in points),
-        "start_date": start,
-        "end_date": end,
-        "daily": "precipitation_sum",
-        "timezone": "Asia/Kolkata",
-    })
+    query = urllib.parse.urlencode(
+        {
+            "latitude": ",".join(f"{la:.4f}" for la, _ in points),
+            "longitude": ",".join(f"{lo:.4f}" for _, lo in points),
+            "start_date": start,
+            "end_date": end,
+            "daily": "precipitation_sum",
+            "timezone": "Asia/Kolkata",
+        }
+    )
     with urllib.request.urlopen(f"{ARCHIVE_URL}?{query}", timeout=timeout) as response:
         payload = json.load(response)
 
@@ -87,10 +90,10 @@ def fetch_daily(points, start: str, end: str, timeout: int = 90):
         payload = [payload]
 
     dates = payload[0]["daily"]["time"]
-    series = np.array([
-        [v if v is not None else 0.0 for v in p["daily"]["precipitation_sum"]]
-        for p in payload
-    ], dtype=float)
+    series = np.array(
+        [[v if v is not None else 0.0 for v in p["daily"]["precipitation_sum"]] for p in payload],
+        dtype=float,
+    )
     return dates, series
 
 
@@ -184,9 +187,7 @@ def analyse(event: str = "2018", n_grid: int = 3) -> Dict:
     for w in (1, 2, 3, 5, 7):
         total, i = max_accumulation(mean_daily, w)
         windows[f"max_{w}day_mm"] = round(total, 1)
-        windows[f"max_{w}day_window"] = (
-            f"{dates[i]}..{dates[i + w - 1]}" if i is not None else None
-        )
+        windows[f"max_{w}day_window"] = f"{dates[i]}..{dates[i + w - 1]}" if i is not None else None
 
     peak = int(np.argmax(mean_daily))
     result = {
@@ -235,7 +236,9 @@ def main() -> None:  # pragma: no cover
     parser.add_argument("--grid", type=int, default=3, help="Sampling grid side")
     parser.add_argument("--all", action="store_true", help="Report every known event")
     parser.add_argument(
-        "--source", default="imd", choices=["imd", "era5"],
+        "--source",
+        default="imd",
+        choices=["imd", "era5"],
         help="imd = official gauge analysis (default); era5 = reanalysis cross-check",
     )
     args = parser.parse_args()
@@ -267,12 +270,15 @@ def main() -> None:  # pragma: no cover
         LOGGER.info("=" * 62)
         LOGGER.info(
             "  wettest day   %s  %.1f mm district mean",
-            r["wettest_day"], r["wettest_day_district_mean_mm"],
+            r["wettest_day"],
+            r["wettest_day_district_mean_mm"],
         )
         for w in (1, 2, 3, 5, 7):
             LOGGER.info(
                 "  max %d-day     %6.1f mm   (%s)",
-                w, r[f"max_{w}day_mm"], r[f"max_{w}day_window"],
+                w,
+                r[f"max_{w}day_mm"],
+                r[f"max_{w}day_window"],
             )
         LOGGER.info("  month total   %6.1f mm", r["month_total_mm"])
         if "era5_cross_check" in r:
@@ -283,7 +289,8 @@ def main() -> None:  # pragma: no cover
             )
         LOGGER.info(
             "  -> reference depth (%d-day storm, pairs with AMC III): %.1f mm",
-            STORM_WINDOW_DAYS, r["reference_event_mm"],
+            STORM_WINDOW_DAYS,
+            r["reference_event_mm"],
         )
 
     merged = merge_results(_load_existing(out), new_results)

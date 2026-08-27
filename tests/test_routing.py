@@ -5,6 +5,7 @@ The properties that matter downstream: the network must be acyclic (a cycle
 double-counts mass in the single-pass accumulation), accumulation must
 conserve total weight, and water must never be routed uphill.
 """
+
 import numpy as np
 import pytest
 
@@ -96,9 +97,7 @@ class TestAccumulation:
         w = np.ones_like(elev)
         acc = accumulate(w, receiver, order, valid)
 
-        terminal = np.array(
-            [receiver[i] == i for i in range(elev.size)]
-        ).reshape(elev.shape)
+        terminal = np.array([receiver[i] == i for i in range(elev.size)]).reshape(elev.shape)
         assert np.nansum(acc[terminal & valid]) == pytest.approx(valid.sum())
 
     def test_downstream_is_at_least_upstream(self, ramp):

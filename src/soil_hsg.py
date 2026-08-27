@@ -87,13 +87,14 @@ calibration chain.
 
 Run:  python src/soil_hsg.py --build
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import numpy as np
 
@@ -189,9 +190,18 @@ def usda_texture(sand_pct: np.ndarray, clay_pct: np.ndarray) -> np.ndarray:
 
 
 TEXTURE_ORDER = (
-    "sand", "loamy sand", "sandy loam", "loam", "silt loam", "silt",
-    "sandy clay loam", "clay loam", "silty clay loam", "sandy clay",
-    "silty clay", "clay",
+    "sand",
+    "loamy sand",
+    "sandy loam",
+    "loam",
+    "silt loam",
+    "silt",
+    "sandy clay loam",
+    "clay loam",
+    "silty clay loam",
+    "sandy clay",
+    "silty clay",
+    "clay",
 )
 
 
@@ -275,7 +285,10 @@ def fetch_property(
     if valid.any():
         LOGGER.info(
             "    %s: median %.1f%%, range %.1f-%.1f%%",
-            prop, np.median(pct[valid]), pct[valid].min(), pct[valid].max(),
+            prop,
+            np.median(pct[valid]),
+            pct[valid].min(),
+            pct[valid].max(),
         )
     return pct
 
@@ -304,7 +317,8 @@ def build(aligned_dir: Optional[Path] = None) -> Dict:
     n_demoted = int((hsg != before).sum())
     LOGGER.info(
         "  demoted %d px below %.0f m for a near-surface water table",
-        n_demoted, WATERLOGGED_PROMOTION["elevation_m"],
+        n_demoted,
+        WATERLOGGED_PROMOTION["elevation_m"],
     )
 
     _, district = read_raster("lulc", aligned_dir=aligned_dir)
@@ -338,9 +352,7 @@ def build(aligned_dir: Optional[Path] = None) -> Dict:
             "explicit demotion below 5 m for the monsoon water table."
         ),
     }
-    (aligned_dir / "soil_hsg.json").write_text(
-        json.dumps(summary, indent=2), encoding="utf-8"
-    )
+    (aligned_dir / "soil_hsg.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     LOGGER.info("Wrote %s", out_path.name)
     return summary
 

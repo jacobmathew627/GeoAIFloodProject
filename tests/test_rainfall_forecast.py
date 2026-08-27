@@ -6,6 +6,7 @@ nothing from after t, and the target must be strictly the following days. A
 time series shuffled or mis-indexed produces spectacular scores and no skill,
 the temporal twin of the spatial-autocorrelation problem in the flood model.
 """
+
 import numpy as np
 import pytest
 
@@ -25,7 +26,7 @@ def series():
     n = 4 * 365
     dates = np.datetime64("2000-01-01", "D") + np.arange(n)
     doy = np.arange(n) % 365
-    seasonal = 12.0 * np.exp(-((doy - 190) ** 2) / (2 * 45.0 ** 2))
+    seasonal = 12.0 * np.exp(-((doy - 190) ** 2) / (2 * 45.0**2))
     rng = np.random.default_rng(0)
     rain = np.clip(seasonal * rng.gamma(1.2, 1.0, size=n), 0, None).astype(float)
     return dates, rain
@@ -44,7 +45,7 @@ class TestFeatureConstruction:
         # Locate a sample by its timestamp and recompute the target by hand.
         i = 100
         t = int(np.flatnonzero(dates == stamps[i])[0])
-        expected = rain[t + 1: t + 1 + HORIZON_DAYS].sum()
+        expected = rain[t + 1 : t + 1 + HORIZON_DAYS].sum()
         assert y[i] == pytest.approx(expected, rel=1e-5)
 
     def test_no_future_leakage_in_features(self, series):
@@ -58,7 +59,7 @@ class TestFeatureConstruction:
         i = 200
         t = int(np.flatnonzero(dates == stamps[i])[0])
         tampered = rain.copy()
-        tampered[t + 1:] *= 7.5          # rewrite everything after t
+        tampered[t + 1 :] *= 7.5  # rewrite everything after t
 
         X_after, _, _ = build_features(dates, tampered)
         np.testing.assert_allclose(X_before[i], X_after[i], rtol=1e-6)
@@ -103,9 +104,7 @@ class TestBaselines:
     def test_persistence_is_the_trailing_three_day_sum(self, series):
         dates, rain = series
         X, _, _ = build_features(dates, rain)
-        np.testing.assert_allclose(
-            persistence_baseline(X), X[:, FEATURE_NAMES.index("sum_3d")]
-        )
+        np.testing.assert_allclose(persistence_baseline(X), X[:, FEATURE_NAMES.index("sum_3d")])
 
     def test_climatology_is_seasonal(self, series):
         """It must be wetter in the monsoon peak than in the dry season."""
@@ -114,8 +113,7 @@ class TestBaselines:
         clim = climatology_baseline(stamps, y, stamps)
 
         doy = (
-            stamps.astype("datetime64[D]")
-            - stamps.astype("datetime64[Y]").astype("datetime64[D]")
+            stamps.astype("datetime64[D]") - stamps.astype("datetime64[Y]").astype("datetime64[D]")
         ).astype(int) + 1
         wet = clim[(doy > 170) & (doy < 210)].mean()
         dry = clim[(doy > 1) & (doy < 40)].mean()

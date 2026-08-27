@@ -3,6 +3,7 @@ UI Components for the GeoAI Flood Risk Dashboard.
 
 Sidebar controls, analytics tabs, place search and map-click readout.
 """
+
 from __future__ import annotations
 
 import logging
@@ -67,9 +68,7 @@ def render_sidebar(rainfall_cfg, risk_cfg, known_places) -> Dict[str, Any]:
         rainfall = _fetch_live_rainfall(rainfall_cfg)
     if rainfall is None:
         rainfall = float(
-            st.sidebar.slider(
-                "Rainfall intensity (mm, 24h)", 0, rainfall_cfg.max_slider, 150
-            )
+            st.sidebar.slider("Rainfall intensity (mm, 24h)", 0, rainfall_cfg.max_slider, 150)
         )
 
     is_2018 = st.sidebar.checkbox("Simulate the 2018 flood event", value=False)
@@ -117,8 +116,7 @@ def _fetch_model_forecast() -> Optional[float]:
         return float(result["predicted_total_mm"])
     except FileNotFoundError:
         st.sidebar.warning(
-            "No forecast model. Train it with "
-            "`python src/rainfall_forecast.py --train`."
+            "No forecast model. Train it with " "`python src/rainfall_forecast.py --train`."
         )
         return None
     except Exception as exc:
@@ -182,9 +180,7 @@ def render_advanced_analytics(
     px_km2 = pixel_area_km2_from_transform(transform)
     stats = compute_risk_stats(data, risk_cfg, transform)
 
-    tab1, tab2, tab3 = st.tabs(
-        ["Risk statistics", "Scenario comparison", "Priority zones"]
-    )
+    tab1, tab2, tab3 = st.tabs(["Risk statistics", "Scenario comparison", "Priority zones"])
 
     with tab1:
         st.subheader("Risk class breakdown")
@@ -235,7 +231,10 @@ def render_advanced_analytics(
             (risk_cfg.critical, "#d73027", "Critical"),
         ]:
             ax.axvline(
-                threshold, color=colour, linewidth=2, linestyle="--",
+                threshold,
+                color=colour,
+                linewidth=2,
+                linestyle="--",
                 label=f"{name} (>={threshold:.1%})",
             )
         ax.set_xlim(0, 1)
@@ -276,8 +275,7 @@ def render_advanced_analytics(
             # Monotonicity is a property the physics guarantees; surface it so
             # a regression in the hazard model is visible in the UI.
             crit_series = [
-                float((maps[mm][maps[mm] > -9000] >= risk_cfg.critical).mean())
-                for mm in depths
+                float((maps[mm][maps[mm] > -9000] >= risk_cfg.critical).mean()) for mm in depths
             ]
             if all(b >= a - 1e-9 for a, b in zip(crit_series, crit_series[1:])):
                 st.success("Critical-area fraction increases monotonically with rainfall.")
@@ -314,8 +312,13 @@ def render_advanced_analytics(
 # Place search and click readout
 # ──────────────────────────────────────────────
 def render_live_analytics(
-    grid, rainfall: float, st_data, data: np.ndarray, layer_type: str,
-    risk_cfg, transform,
+    grid,
+    rainfall: float,
+    st_data,
+    data: np.ndarray,
+    layer_type: str,
+    risk_cfg,
+    transform,
 ) -> None:
     """
     Point query and summary for the live layers.
@@ -419,14 +422,10 @@ def render_place_search(known_places: dict) -> None:
         for name, coords in matches[:5]:
             st.sidebar.success(f"{name}: {coords[0]:.4f}, {coords[1]:.4f}")
     else:
-        st.sidebar.error(
-            "Not found. Try: " + ", ".join(list(known_places)[:4])
-        )
+        st.sidebar.error("Not found. Try: " + ", ".join(list(known_places)[:4]))
 
 
-def render_map_click_info(
-    st_data, data: np.ndarray, crs, transf, nodata, layer_type: str
-) -> None:
+def render_map_click_info(st_data, data: np.ndarray, crs, transf, nodata, layer_type: str) -> None:
     """Report the raster value at the clicked map location."""
     if data is None or crs is None or transf is None:
         return

@@ -15,6 +15,7 @@ prediction. `geoai_flood_final.pth` is not loadable here at all: it is a
 64-base-channel architecture with `inc.double_conv.*` keys, whereas this
 UNet is 32-base-channel with `inc.*` keys.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -109,8 +110,15 @@ _MODEL_CONFIGS: Dict[str, Dict[str, Any]] = {
     "pytorch_supercharged": {
         "model_file": MODEL_FILES["pytorch_supercharged"],
         "features": [
-            "dem", "slope", "flow", "lulc", "sar_vv", "sar_vh",
-            "twi", "river_dist", "urban_dist",
+            "dem",
+            "slope",
+            "flow",
+            "lulc",
+            "sar_vv",
+            "sar_vh",
+            "twi",
+            "river_dist",
+            "urban_dist",
         ],
         "suffix": "_legacy_supercharged",
     },
@@ -121,9 +129,7 @@ AVAILABLE_MODELS: List[str] = list(_MODEL_CONFIGS)
 
 def get_model_config(model_type: str) -> Dict[str, Any]:
     if model_type not in _MODEL_CONFIGS:
-        raise ValueError(
-            f"Unknown model_type {model_type!r}. Available: {AVAILABLE_MODELS}"
-        )
+        raise ValueError(f"Unknown model_type {model_type!r}. Available: {AVAILABLE_MODELS}")
     return _MODEL_CONFIGS[model_type]
 
 
@@ -233,9 +239,7 @@ def _build_stack(
     return stack, valid_all, profile
 
 
-def _tiled_inference(
-    model: nn.Module, stack: np.ndarray, device: torch.device
-) -> np.ndarray:
+def _tiled_inference(model: nn.Module, stack: np.ndarray, device: torch.device) -> np.ndarray:
     """
     Tiled inference with overlap averaging.
 
@@ -303,7 +307,9 @@ def run_inference(
     device = _resolve_device()
     LOGGER.info(
         "Legacy inference: model=%s channels=%d device=%s",
-        model_type, len(features), device,
+        model_type,
+        len(features),
+        device,
     )
 
     model = UNet(n_channels=len(features), n_classes=1).to(device)
@@ -332,7 +338,10 @@ def run_inference(
     if inside.size:
         LOGGER.info(
             "Valid pixels %.2fM | min=%.4f max=%.4f mean=%.4f",
-            inside.size / 1e6, inside.min(), inside.max(), inside.mean(),
+            inside.size / 1e6,
+            inside.min(),
+            inside.max(),
+            inside.mean(),
         )
 
     del stack
@@ -352,7 +361,7 @@ def main() -> None:  # pragma: no cover
         "`python src/susceptibility.py --train --predict` then `python src/hazard.py`."
     )
 
-    for model_type in (AVAILABLE_MODELS if args.all else [args.model]):
+    for model_type in AVAILABLE_MODELS if args.all else [args.model]:
         try:
             output, _ = run_inference(model_type)
             print(f"{model_type}: shape={output.shape}")

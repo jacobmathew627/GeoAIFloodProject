@@ -33,6 +33,7 @@ Sources are recorded per point so every label can be audited or discarded.
 
 Run:  python src/waterlogging_validation.py
 """
+
 from __future__ import annotations
 
 import json
@@ -40,7 +41,6 @@ import logging
 import time
 import urllib.parse
 import urllib.request
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -63,49 +63,96 @@ CACHE = MODELS_DIR / "waterlogging_points.json"
 DOCUMENTED_HOTSPOTS: List[Dict] = [
     # Named in reporting on Operation Breakthrough phase 4, the Irrigation
     # Department's anti-flooding programme for the city.
-    {"name": "Ernakulam South railway station",
-     "source": "Operation Breakthrough phase 4",
-     "queries": ["Ernakulam Junction railway station, Ernakulam",
-                 "Ernakulam Junction, Kerala",
-                 "Ernakulam South, Kochi"]},
-    {"name": "Jos Junction",
-     "source": "Operation Breakthrough phase 4",
-     "queries": ["Jos Junction, Ernakulam", "MG Road, Ernakulam, Kerala",
-                 "Padma Junction, Kochi"]},
-    {"name": "Durbar Hall ground",
-     "source": "Operation Breakthrough phase 4",
-     "queries": ["Durbar Hall Road, Ernakulam", "Durbar Hall Art Centre, Kochi"]},
-    {"name": "Rajendra Maidan",
-     "source": "Operation Breakthrough phase 4",
-     "queries": ["Rajendra Maidan, Ernakulam", "Ernakulam Town Hall, Kochi"]},
-    {"name": "High Court Junction",
-     "source": "Operation Breakthrough phase 4",
-     "queries": ["Kerala High Court, Ernakulam", "High Court of Kerala, Kochi"]},
-    {"name": "Kammattipadam",
-     "source": "Operation Breakthrough phase 4",
-     "queries": ["Kammattipadam, Ernakulam", "Karanakodam, Kochi"]},
+    {
+        "name": "Ernakulam South railway station",
+        "source": "Operation Breakthrough phase 4",
+        "queries": [
+            "Ernakulam Junction railway station, Ernakulam",
+            "Ernakulam Junction, Kerala",
+            "Ernakulam South, Kochi",
+        ],
+    },
+    {
+        "name": "Jos Junction",
+        "source": "Operation Breakthrough phase 4",
+        "queries": [
+            "Jos Junction, Ernakulam",
+            "MG Road, Ernakulam, Kerala",
+            "Padma Junction, Kochi",
+        ],
+    },
+    {
+        "name": "Durbar Hall ground",
+        "source": "Operation Breakthrough phase 4",
+        "queries": ["Durbar Hall Road, Ernakulam", "Durbar Hall Art Centre, Kochi"],
+    },
+    {
+        "name": "Rajendra Maidan",
+        "source": "Operation Breakthrough phase 4",
+        "queries": ["Rajendra Maidan, Ernakulam", "Ernakulam Town Hall, Kochi"],
+    },
+    {
+        "name": "High Court Junction",
+        "source": "Operation Breakthrough phase 4",
+        "queries": ["Kerala High Court, Ernakulam", "High Court of Kerala, Kochi"],
+    },
+    {
+        "name": "Kammattipadam",
+        "source": "Operation Breakthrough phase 4",
+        "queries": ["Kammattipadam, Ernakulam", "Karanakodam, Kochi"],
+    },
     # Named in press reporting of the 2024 monsoon flooding in the city.
-    {"name": "Kalamassery", "source": "press reporting, 2024 monsoon",
-     "queries": ["Kalamassery, Ernakulam, Kerala"]},
-    {"name": "Kaloor", "source": "press reporting, 2024 monsoon",
-     "queries": ["Kaloor, Ernakulam, Kerala"]},
-    {"name": "Edappally", "source": "press reporting, 2024 monsoon",
-     "queries": ["Edappally, Ernakulam, Kerala"]},
+    {
+        "name": "Kalamassery",
+        "source": "press reporting, 2024 monsoon",
+        "queries": ["Kalamassery, Ernakulam, Kerala"],
+    },
+    {
+        "name": "Kaloor",
+        "source": "press reporting, 2024 monsoon",
+        "queries": ["Kaloor, Ernakulam, Kerala"],
+    },
+    {
+        "name": "Edappally",
+        "source": "press reporting, 2024 monsoon",
+        "queries": ["Edappally, Ernakulam, Kerala"],
+    },
     # Kochi's primary drainage arteries; their chronic overflow is the subject
     # of the Operation Breakthrough programme.
-    {"name": "Mullassery Canal", "source": "Operation Breakthrough",
-     "queries": ["Mullassery Canal, Ernakulam", "Mullassery Canal Road, Kochi"]},
-    {"name": "Thevara-Perandoor Canal", "source": "Operation Breakthrough",
-     "queries": ["Thevara Perandoor Canal, Kochi", "Perandoor Canal, Ernakulam",
-                 "Thevara, Ernakulam, Kerala"]},
-    {"name": "Kadavanthra", "source": "Operation Breakthrough (TP Canal reach)",
-     "queries": ["Kadavanthra, Ernakulam, Kerala"]},
-    {"name": "Panampilly Nagar", "source": "Operation Breakthrough (TP Canal reach)",
-     "queries": ["Panampilly Nagar, Ernakulam, Kerala"]},
-    {"name": "Vyttila", "source": "press reporting, recurrent junction flooding",
-     "queries": ["Vyttila, Ernakulam, Kerala"]},
-    {"name": "Palarivattom", "source": "press reporting, recurrent junction flooding",
-     "queries": ["Palarivattom, Ernakulam, Kerala"]},
+    {
+        "name": "Mullassery Canal",
+        "source": "Operation Breakthrough",
+        "queries": ["Mullassery Canal, Ernakulam", "Mullassery Canal Road, Kochi"],
+    },
+    {
+        "name": "Thevara-Perandoor Canal",
+        "source": "Operation Breakthrough",
+        "queries": [
+            "Thevara Perandoor Canal, Kochi",
+            "Perandoor Canal, Ernakulam",
+            "Thevara, Ernakulam, Kerala",
+        ],
+    },
+    {
+        "name": "Kadavanthra",
+        "source": "Operation Breakthrough (TP Canal reach)",
+        "queries": ["Kadavanthra, Ernakulam, Kerala"],
+    },
+    {
+        "name": "Panampilly Nagar",
+        "source": "Operation Breakthrough (TP Canal reach)",
+        "queries": ["Panampilly Nagar, Ernakulam, Kerala"],
+    },
+    {
+        "name": "Vyttila",
+        "source": "press reporting, recurrent junction flooding",
+        "queries": ["Vyttila, Ernakulam, Kerala"],
+    },
+    {
+        "name": "Palarivattom",
+        "source": "press reporting, recurrent junction flooding",
+        "queries": ["Palarivattom, Ernakulam, Kerala"],
+    },
 ]
 
 #: Score each point as the maximum within this radius, to absorb geocoding
@@ -151,10 +198,15 @@ def resolve_hotspots(use_cache: bool = True) -> List[Dict]:
             LOGGER.warning("  no match: %s", entry["name"])
             continue
         lat, lon = coords
-        points.append({
-            "name": entry["name"], "source": entry["source"],
-            "resolved_query": used, "lat": lat, "lon": lon,
-        })
+        points.append(
+            {
+                "name": entry["name"],
+                "source": entry["source"],
+                "resolved_query": used,
+                "lat": lat,
+                "lon": lon,
+            }
+        )
         LOGGER.info("  %-32s %.5f, %.5f  via %r", entry["name"], lat, lon, used)
 
     CACHE.parent.mkdir(parents=True, exist_ok=True)
@@ -287,7 +339,9 @@ def evaluate(rainfall_mm: float = 150.0, use_cache: bool = True) -> Dict:
     band = (float(np.min(elev)), float(np.percentile(elev, 95))) if elev.size else None
     LOGGER.info(
         "Hotspot elevations: %.1f-%.1f m (median %.1f)",
-        elev.min(), elev.max(), np.median(elev),
+        elev.min(),
+        elev.max(),
+        np.median(elev),
     )
 
     backgrounds = {
@@ -304,15 +358,19 @@ def evaluate(rainfall_mm: float = 150.0, use_cache: bool = True) -> Dict:
     }
 
     for layer_name, surface in layers.items():
-        pos, kept = [], []
+        pos_vals: list = []
+        kept = []
         for p in points:
             v = sample_at(grid, surface, p["lat"], p["lon"])
             if np.isfinite(v):
-                pos.append(v)
+                pos_vals.append(v)
                 kept.append(p["name"])
-        pos = np.asarray(pos)
-        entry = {"n_hotspots_scored": int(pos.size), "scored_points": kept,
-                 "hotspot_median": float(np.median(pos)) if pos.size else None}
+        pos = np.asarray(pos_vals)
+        entry: Dict[str, object] = {
+            "n_hotspots_scored": int(pos.size),
+            "scored_points": kept,
+            "hotspot_median": float(np.median(pos)) if pos.size else None,
+        }
 
         for bg_label, bg_idx in backgrounds.items():
             neg = surface.ravel()[bg_idx]
@@ -320,7 +378,10 @@ def evaluate(rainfall_mm: float = 150.0, use_cache: bool = True) -> Dict:
             if pos.size < 3 or neg.size < 50:
                 LOGGER.warning(
                     "%s vs %s: too few samples (%d pos, %d neg)",
-                    layer_name, bg_label, pos.size, neg.size,
+                    layer_name,
+                    bg_label,
+                    pos.size,
+                    neg.size,
                 )
                 continue
 
@@ -335,8 +396,13 @@ def evaluate(rainfall_mm: float = 150.0, use_cache: bool = True) -> Dict:
             LOGGER.info(
                 "%-20s vs %-24s AUC %.3f (95%% CI %.3f-%.3f)  "
                 "hotspot %.4f vs background %.4f  %s",
-                layer_name, bg_label, auc, lo, hi,
-                np.median(pos), np.median(neg),
+                layer_name,
+                bg_label,
+                auc,
+                lo,
+                hi,
+                np.median(pos),
+                np.median(neg),
                 "SKILL" if lo > 0.5 else "CHANCE",
             )
 

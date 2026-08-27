@@ -5,6 +5,7 @@ The graph experiment concluded *against* adopting the GNN, but the harness is
 kept and tested: a negative result is only trustworthy if the machinery that
 produced it is correct.
 """
+
 import numpy as np
 import pytest
 import torch
@@ -23,7 +24,9 @@ class _FakeNet:
         self.order = _topological_order(self.elev, self.valid)
         rank_flat = np.empty(self.order.size, dtype=np.int64)
         rank_flat[self.order] = np.arange(self.order.size, dtype=np.int64)
-        self.receiver = d8_receivers(self.elev, self.valid, None, rank_flat.reshape(self.elev.shape))
+        self.receiver = d8_receivers(
+            self.elev, self.valid, None, rank_flat.reshape(self.elev.shape)
+        )
         self._cell_area = cell_area
 
     @property
@@ -35,7 +38,9 @@ class _FakeNet:
 
         return accumulate(
             np.full(self.elev.shape, self._cell_area, dtype=np.float32),
-            self.receiver, self.order, self.valid,
+            self.receiver,
+            self.order,
+            self.valid,
         )
 
 
@@ -51,13 +56,16 @@ def y_network():
         . 5 .
     """
     n = np.nan
-    return np.array([
-        [9, n, 9],
-        [8, n, 8],
-        [n, 7, n],
-        [n, 6, n],
-        [n, 5, n],
-    ], dtype=np.float32)
+    return np.array(
+        [
+            [9, n, 9],
+            [8, n, 8],
+            [n, 7, n],
+            [n, 6, n],
+            [n, 5, n],
+        ],
+        dtype=np.float32,
+    )
 
 
 class TestDelineation:

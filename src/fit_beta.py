@@ -44,6 +44,7 @@ of how well it is determined -- not the fit residual.
 Run:  python src/fit_beta.py
       python src/fit_beta.py --events 2019 2021
 """
+
 from __future__ import annotations
 
 import argparse
@@ -98,11 +99,13 @@ def _observed_extents(
 
         label, valid = read_raster(f"ndem_flood_{name}", aligned_dir=aligned_dir)
         flooded = (label > 0.5) & valid & domain
-        out.append({
-            "event": name,
-            "rainfall_mm": float(rain),
-            "observed_km2": float(flooded.sum()) * px_km2,
-        })
+        out.append(
+            {
+                "event": name,
+                "rainfall_mm": float(rain),
+                "observed_km2": float(flooded.sum()) * px_km2,
+            }
+        )
 
     if not out:
         raise RuntimeError("No events with both a label raster and IMD rainfall")
@@ -126,9 +129,7 @@ def _load_surface(
 
     path = OUTPUT_DIR / "susceptibility.tif"
     if not path.exists():
-        raise FileNotFoundError(
-            f"{path} not found. Run: python src/susceptibility.py --predict"
-        )
+        raise FileNotFoundError(f"{path} not found. Run: python src/susceptibility.py --predict")
 
     import rasterio
 
@@ -180,7 +181,12 @@ def _load_routed_ratios(
         depth = ev["rainfall_mm"]
         if depth not in ratio_by_depth:
             ratio_by_depth[depth] = routed_runoff_ratio(
-                basis_flat, classes, depth, reference_mm, cell_area_m2, valid_flat,
+                basis_flat,
+                classes,
+                depth,
+                reference_mm,
+                cell_area_m2,
+                valid_flat,
             )
         out.append({**ev, "ratio": ratio_by_depth[depth]})
     return out
@@ -332,7 +338,9 @@ def run(
     LOGGER.info(
         "Reference event %.1f mm carries no information about beta; "
         "%d of %d events are informative",
-        ref, len(informative), len(obs),
+        ref,
+        len(informative),
+        len(obs),
     )
     if not informative:
         raise RuntimeError(
@@ -358,16 +366,23 @@ def run(
         marker = "" if ev in informative else "  (reference, fixed by construction)"
         LOGGER.info(
             "%-8s %10.1f %9.1f km2 %8.1f km2 %8.1f km2%s",
-            ev["event"], ev["rainfall_mm"], ev["observed_km2"], pred, old, marker,
+            ev["event"],
+            ev["rainfall_mm"],
+            ev["observed_km2"],
+            pred,
+            old,
+            marker,
         )
-        per_event.append({
-            "event": ev["event"],
-            "rainfall_mm": ev["rainfall_mm"],
-            "observed_km2": round(ev["observed_km2"], 1),
-            "predicted_km2_fitted": round(pred, 1),
-            "predicted_km2_assumed": round(old, 1),
-            "informative": ev in informative,
-        })
+        per_event.append(
+            {
+                "event": ev["event"],
+                "rainfall_mm": ev["rainfall_mm"],
+                "observed_km2": round(ev["observed_km2"], 1),
+                "predicted_km2_fitted": round(pred, 1),
+                "predicted_km2_assumed": round(old, 1),
+                "informative": ev in informative,
+            }
+        )
 
     # Leave-one-out: with one parameter and few points, the spread of beta
     # across subsets says more about identifiability than the residual does.
@@ -381,16 +396,21 @@ def run(
             pred = _predict(held, b_loo)
             LOGGER.info(
                 "  hold out %s: beta=%.3f -> %.1f km2 vs %.1f observed (x%.2f)",
-                held["event"], b_loo, pred, held["observed_km2"],
+                held["event"],
+                b_loo,
+                pred,
+                held["observed_km2"],
                 pred / max(held["observed_km2"], 1e-6),
             )
-            loo.append({
-                "held_out": held["event"],
-                "beta": round(b_loo, 3),
-                "predicted_km2": round(pred, 1),
-                "observed_km2": round(held["observed_km2"], 1),
-                "ratio": round(pred / max(held["observed_km2"], 1e-6), 2),
-            })
+            loo.append(
+                {
+                    "held_out": held["event"],
+                    "beta": round(b_loo, 3),
+                    "predicted_km2": round(pred, 1),
+                    "observed_km2": round(held["observed_km2"], 1),
+                    "ratio": round(pred / max(held["observed_km2"], 1e-6), 2),
+                }
+            )
         betas = [d["beta"] for d in loo]
         LOGGER.info("  beta across folds: %.3f to %.3f", min(betas), max(betas))
     else:
@@ -429,10 +449,11 @@ def main() -> None:  # pragma: no cover
     parser = argparse.ArgumentParser(description="Fit the rainfall sensitivity beta")
     parser.add_argument("--events", nargs="*", default=None)
     parser.add_argument(
-        "--pointwise", action="store_true",
+        "--pointwise",
+        action="store_true",
         help="Fit against the pointwise ratio instead of the routed one. "
-             "hazard.combine() defaults to routed, so this is for an explicit "
-             "before/after comparison, not normal use.",
+        "hazard.combine() defaults to routed, so this is for an explicit "
+        "before/after comparison, not normal use.",
     )
     args = parser.parse_args()
 

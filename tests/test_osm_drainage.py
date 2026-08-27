@@ -6,7 +6,6 @@ here is the configuration and the bbox arithmetic, plus the one finding that
 must not be quietly reversed: proximity to a mapped channel is associated with
 *more* waterlogging in this city, not less.
 """
-import pytest
 
 from config import GEO
 from osm_drainage import DENSITY_RADIUS_M, WATERWAY_CLASSES, _bbox

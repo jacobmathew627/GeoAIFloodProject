@@ -8,7 +8,6 @@ two orders of magnitude, and it was the catchment-area probe that caught it.
 These tests pin that probe's behaviour, including that it fails loudly rather
 than quietly aligning a bad raster.
 """
-import json
 
 import numpy as np
 import pytest
@@ -49,8 +48,16 @@ def accum(tmp_path):
     data = np.full((height, width), 1e5, dtype=np.float32)  # off-channel: 0.1 km2
     path = tmp_path / "accum_area.tif"
     with rasterio.open(
-        path, "w", driver="GTiff", height=height, width=width, count=1,
-        dtype="float32", crs="EPSG:32643", transform=transform, nodata=-9999.0,
+        path,
+        "w",
+        driver="GTiff",
+        height=height,
+        width=width,
+        count=1,
+        dtype="float32",
+        crs="EPSG:32643",
+        transform=transform,
+        nodata=-9999.0,
     ) as dst:
         dst.write(data, 1)
     return path, transform, (height, width)
@@ -156,8 +163,16 @@ class TestValidate:
         transform = from_origin(0.0, 100000.0, 30.0, 30.0)
         path = tmp_path / "tiny.tif"
         with rasterio.open(
-            path, "w", driver="GTiff", height=10, width=10, count=1,
-            dtype="float32", crs="EPSG:32643", transform=transform, nodata=-9999.0,
+            path,
+            "w",
+            driver="GTiff",
+            height=10,
+            width=10,
+            count=1,
+            dtype="float32",
+            crs="EPSG:32643",
+            transform=transform,
+            nodata=-9999.0,
         ) as dst:
             dst.write(np.ones((10, 10), dtype="float32"), 1)
 

@@ -18,8 +18,9 @@ FILES_TO_PROCESS = {
     "UWI_200": "UWI_200mm_snap.tif",
     "SAR_VV": "SAR_flood_2018_VV_aligned.tif",
     "SAR_VH": "SAR_flood_2018_VH_aligned.tif",
-    "Label": "flood_mask_2018_ekm.tif"
+    "Label": "flood_mask_2018_ekm.tif",
 }
+
 
 def align_rasters():
     if not os.path.exists(OUTPUT_DIR):
@@ -34,28 +35,30 @@ def align_rasters():
         dst_height = src.height
         dst_profile = src.profile.copy()
 
-    dst_profile.update({
-        'driver': 'GTiff',
-        'transform': dst_transform,
-        'crs': dst_crs,
-        'width': dst_width,
-        'height': dst_height,
-        'count': 1,
-        'nodata': -9999 if dst_profile.get('nodata') is None else dst_profile.get('nodata')
-    })
-    
+    dst_profile.update(
+        {
+            "driver": "GTiff",
+            "transform": dst_transform,
+            "crs": dst_crs,
+            "width": dst_width,
+            "height": dst_height,
+            "count": 1,
+            "nodata": -9999 if dst_profile.get("nodata") is None else dst_profile.get("nodata"),
+        }
+    )
+
     print(f"Reference Grid: {dst_width}x{dst_height}, CRS: {dst_crs}")
 
     for key, filename in FILES_TO_PROCESS.items():
         src_path = os.path.join(INPUT_DIR, filename)
         dst_path = os.path.join(OUTPUT_DIR, f"{key}_aligned.tif")
-        
+
         if not os.path.exists(src_path):
             print(f"Warning: {filename} not found. Skipping.")
             continue
 
         print(f"Processing {key} ({filename})...")
-        
+
         with rasterio.open(src_path) as src:
             # Determine resampling method
             if key == "LULC" or key == "Label":
@@ -66,13 +69,13 @@ def align_rasters():
             # Check if nodata is defined
             src_nodata = src.nodata
             if src_nodata is None:
-                # Need to handle nodata carefully. 
+                # Need to handle nodata carefully.
                 # For continuous vars, assume -9999 or 0 if strictly positive?
-                # Actually, rasterio reproject defaults to 0 if not specified for output, 
+                # Actually, rasterio reproject defaults to 0 if not specified for output,
                 # but we set nodata in profile.
                 pass
 
-            with rasterio.open(dst_path, 'w', **dst_profile) as dst:
+            with rasterio.open(dst_path, "w", **dst_profile) as dst:
                 reproject(
                     source=rasterio.band(src, 1),
                     destination=rasterio.band(dst, 1),
@@ -81,10 +84,11 @@ def align_rasters():
                     dst_transform=dst_transform,
                     dst_crs=dst_crs,
                     resampling=resampling,
-                    dst_nodata=dst_profile['nodata']
+                    dst_nodata=dst_profile["nodata"],
                 )
 
     print("Raster alignment complete.")
+
 
 if __name__ == "__main__":
     align_rasters()

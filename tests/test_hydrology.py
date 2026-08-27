@@ -5,6 +5,7 @@ These encode the physical properties the old hard-coded rainfall multiplier
 table violated: monotonicity in rainfall, boundedness by the rainfall depth,
 and a genuine initial abstraction threshold.
 """
+
 import numpy as np
 import pytest
 
@@ -77,9 +78,9 @@ class TestRunoff:
             q = runoff_depth(depth, curve_number_grid)
             finite = np.isfinite(q)
             if previous is not None:
-                assert (q[finite] >= previous[finite] - 1e-5).all(), (
-                    f"runoff decreased going to {depth} mm"
-                )
+                assert (
+                    q[finite] >= previous[finite] - 1e-5
+                ).all(), f"runoff decreased going to {depth} mm"
             previous = q
 
     def test_never_exceeds_rainfall(self, curve_number_grid):

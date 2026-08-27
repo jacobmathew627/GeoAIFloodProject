@@ -21,6 +21,7 @@ The result is one node per inter-junction reach and its local hillslopes,
 which is the same object the Himachal Pradesh study used (460 sub-watersheds,
 1,700 directed edges) -- see arXiv:2603.15681.
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,12 +37,12 @@ LOGGER = logging.getLogger("geoai_flood")
 class CatchmentGraph:
     """A directed sub-catchment graph over the routing grid."""
 
-    labels: np.ndarray          # (H, W) int32, -1 outside the network
+    labels: np.ndarray  # (H, W) int32, -1 outside the network
     n_nodes: int
-    edges: np.ndarray           # (E, 2) int32, edge u -> v means u drains into v
-    node_cells: np.ndarray      # (n_nodes,) int64, cell count per node
-    node_row: np.ndarray        # (n_nodes,) float32, mean row of each node
-    node_col: np.ndarray        # (n_nodes,) float32, mean col of each node
+    edges: np.ndarray  # (E, 2) int32, edge u -> v means u drains into v
+    node_cells: np.ndarray  # (n_nodes,) int64, cell count per node
+    node_row: np.ndarray  # (n_nodes,) float32, mean row of each node
+    node_col: np.ndarray  # (n_nodes,) float32, mean col of each node
 
     def summary(self) -> str:
         return (
@@ -90,8 +91,11 @@ def build(
 
     LOGGER.info(
         "  %d channel cells (>= %.2f km2), %d junctions, %d terminals -> %d outlets",
-        int(is_channel.sum()), min_area_km2, int(junction.sum()),
-        int(terminal.sum()), outlets.size,
+        int(is_channel.sum()),
+        min_area_km2,
+        int(junction.sum()),
+        int(terminal.sum()),
+        outlets.size,
     )
     if outlets.size == 0:
         raise ValueError("No sub-catchment outlets found; lower min_area_km2")
@@ -114,7 +118,8 @@ def build(
     labelled = label >= 0
     LOGGER.info(
         "  labelled %.2fM of %.2fM valid cells",
-        labelled.sum() / 1e6, valid_flat.sum() / 1e6,
+        labelled.sum() / 1e6,
+        valid_flat.sum() / 1e6,
     )
 
     # ── Edges between adjacent sub-catchments ──
@@ -125,9 +130,7 @@ def build(
     src_label = label[cells]
     dst_label = label[receiver[cells]]
     keep = (dst_label >= 0) & (src_label != dst_label)
-    edges = np.unique(
-        np.stack([src_label[keep], dst_label[keep]], axis=1), axis=0
-    ).astype(np.int32)
+    edges = np.unique(np.stack([src_label[keep], dst_label[keep]], axis=1), axis=0).astype(np.int32)
 
     counts = np.bincount(label[labelled], minlength=outlets.size).astype(np.int64)
     rows, cols = np.divmod(cells, w)

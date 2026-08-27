@@ -6,6 +6,7 @@ USDA texture triangle against canonical points, the texture-to-group mapping,
 the near-surface water table demotion, and the curve number lookup that
 consumes the result.
 """
+
 import numpy as np
 import pytest
 
@@ -33,20 +34,23 @@ def classify(sand_pct, clay_pct):
 
 
 class TestTextureTriangle:
-    @pytest.mark.parametrize("sand,clay,expected", [
-        (90, 5, "sand"),
-        (80, 5, "loamy sand"),
-        (65, 10, "sandy loam"),
-        (40, 20, "loam"),
-        (20, 15, "silt loam"),
-        (10, 5, "silt"),
-        (60, 25, "sandy clay loam"),
-        (30, 33, "clay loam"),
-        (10, 33, "silty clay loam"),
-        (50, 40, "sandy clay"),
-        (10, 45, "silty clay"),
-        (20, 50, "clay"),
-    ])
+    @pytest.mark.parametrize(
+        "sand,clay,expected",
+        [
+            (90, 5, "sand"),
+            (80, 5, "loamy sand"),
+            (65, 10, "sandy loam"),
+            (40, 20, "loam"),
+            (20, 15, "silt loam"),
+            (10, 5, "silt"),
+            (60, 25, "sandy clay loam"),
+            (30, 33, "clay loam"),
+            (10, 33, "silty clay loam"),
+            (50, 40, "sandy clay"),
+            (10, 45, "silty clay"),
+            (20, 50, "clay"),
+        ],
+    )
     def test_canonical_points(self, sand, clay, expected):
         assert classify(sand, clay) == expected
 
@@ -86,8 +90,7 @@ class TestHsgMapping:
         assert HSG_CODES["A"] < HSG_CODES["B"] < HSG_CODES["C"] < HSG_CODES["D"]
 
     def test_maps_indices_to_codes(self):
-        idx = np.array([[TEXTURE_ORDER.index("sand"),
-                         TEXTURE_ORDER.index("clay")]], dtype=np.int8)
+        idx = np.array([[TEXTURE_ORDER.index("sand"), TEXTURE_ORDER.index("clay")]], dtype=np.int8)
         got = hsg_from_texture(idx)
         assert got[0, 0] == HSG_CODES["A"]
         assert got[0, 1] == HSG_CODES["D"]
@@ -110,8 +113,7 @@ class TestUnitConversion:
         rather than the sand corner -- so it *overstates* runoff.
         """
         raw_sand, raw_clay = 412.0, 250.0  # g/kg, i.e. 41.2% and 25.0%
-        correct = classify(raw_sand / G_PER_KG_TO_PERCENT,
-                           raw_clay / G_PER_KG_TO_PERCENT)
+        correct = classify(raw_sand / G_PER_KG_TO_PERCENT, raw_clay / G_PER_KG_TO_PERCENT)
         wrong = classify(raw_sand, raw_clay)
         assert correct == "loam"
         assert wrong == "sandy clay"

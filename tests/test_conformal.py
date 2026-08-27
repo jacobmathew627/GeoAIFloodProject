@@ -4,6 +4,7 @@ Tests for split conformal prediction.
 The central property is the finite-sample coverage guarantee: on exchangeable
 data the prediction set contains the truth at least (1 - alpha) of the time.
 """
+
 import numpy as np
 import pytest
 
@@ -204,10 +205,12 @@ class TestConditionalCoverage:
         rng = np.random.default_rng(5)
         # Model is right at the low end and inverted at the high end.
         p = np.concatenate([rng.uniform(0.0, 0.2, 19_000), rng.uniform(0.8, 1.0, 1_000)])
-        y = np.concatenate([
-            (rng.uniform(size=19_000) < 0.1).astype(int),
-            np.zeros(1_000, dtype=int),  # predicted ~0.9, actually never floods
-        ])
+        y = np.concatenate(
+            [
+                (rng.uniform(size=19_000) < 0.1).astype(int),
+                np.zeros(1_000, dtype=int),  # predicted ~0.9, actually never floods
+            ]
+        )
         t = conformal.fit(p, y, alpha=0.10)
         rows = conditional_coverage(p, y, t, n_bins=5)
         assert min(r["coverage"] for r in rows) < max(r["coverage"] for r in rows)

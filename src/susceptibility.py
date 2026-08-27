@@ -21,6 +21,7 @@ Three things here differ from the previous pipeline and matter:
    inventory. The old maps were raw scores multiplied by a rainfall constant
    and then clipped, which is not a probability of anything.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,10 +34,8 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from config import (
-    ALIGNED_DIR,
     MODELS_DIR,
     OUTPUT_DIR,
-    SUSCEPTIBILITY_FEATURES,
     SUSCEPTIBILITY_MODEL,
     setup_logging,
 )
@@ -58,6 +57,7 @@ BLOCK_SIZE_PX = 500
 @dataclass
 class CVMetrics:
     """Held-out performance for one cross-validation scheme."""
+
     scheme: str
     auc_roc: float
     auc_pr: float
@@ -142,9 +142,7 @@ class SpatialEnsemble:
         """
         pop = float(np.clip(domain_prevalence, 1e-9, 1 - 1e-9))
         smp = float(np.clip(sample_prevalence, 1e-9, 1 - 1e-9))
-        self.prior_offset_ = float(
-            np.log(pop / (1 - pop)) - np.log(smp / (1 - smp))
-        )
+        self.prior_offset_ = float(np.log(pop / (1 - pop)) - np.log(smp / (1 - smp)))
 
     def fit_prior_offset(self, X_domain: np.ndarray, target_prevalence: float) -> float:
         """
@@ -221,9 +219,9 @@ class SpatialEnsemble:
         self.holdout_calibration_ = (y[eval_idx], probe.predict(oof[eval_idx]))
 
         # Final calibrator uses all out-of-fold predictions.
-        self.calibrator_ = IsotonicRegression(
-            y_min=0.0, y_max=1.0, out_of_bounds="clip"
-        ).fit(oof[scored], y[scored])
+        self.calibrator_ = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip").fit(
+            oof[scored], y[scored]
+        )
         self.oof_ = oof
         return self
 
@@ -364,9 +362,7 @@ def train(
     model_dir = model_dir or MODELS_DIR
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    sample = sample_training_points(
-        n_per_class=n_per_class, seed=seed, aligned_dir=aligned_dir
-    )
+    sample = sample_training_points(n_per_class=n_per_class, seed=seed, aligned_dir=aligned_dir)
     X, y = sample["X"], sample["y"]
     features = list(sample["features"])
     groups = spatial_blocks(sample["row"], sample["col"])
@@ -432,17 +428,18 @@ def train(
     px_km2 = 1e-4
     observed_km2 = sample["presence_pixels"] * px_km2
     expected_km2 = (
-        calibrated.predict_proba(X_domain)[:, 1].mean()
-        * sample["domain_pixels"]
-        * px_km2
+        calibrated.predict_proba(X_domain)[:, 1].mean() * sample["domain_pixels"] * px_km2
     )
     LOGGER.info(
         "  domain prevalence %.5f | closed-form offset %.4f -> fitted offset %.4f",
-        domain_prevalence, closed_form_offset, fitted_offset,
+        domain_prevalence,
+        closed_form_offset,
+        fitted_offset,
     )
     LOGGER.info(
         "  expected flooded area at the reference event: %.1f km2 (observed %.1f km2)",
-        expected_km2, observed_km2,
+        expected_km2,
+        observed_km2,
     )
 
     # ── Conformal prediction: distribution-free coverage on the district ──
@@ -459,9 +456,7 @@ def train(
         domain_blocks = spatial_blocks(row_domain, col_domain)
         block_ids = np.unique(domain_blocks)
         rng_cf = np.random.default_rng(seed)
-        cal_blocks = rng_cf.choice(
-            block_ids, size=max(1, len(block_ids) // 2), replace=False
-        )
+        cal_blocks = rng_cf.choice(block_ids, size=max(1, len(block_ids) // 2), replace=False)
         is_cal = np.isin(domain_blocks, cal_blocks)
 
         enough = is_cal.sum() > 1000 and (~is_cal).sum() > 1000
@@ -479,9 +474,7 @@ def train(
             )
 
             LOGGER.info("--- Class-conditional (Mondrian) conformal ---")
-            mondrian_t = conformal.fit_mondrian(
-                p_domain[is_cal], y_domain[is_cal], alpha=0.10
-            )
+            mondrian_t = conformal.fit_mondrian(p_domain[is_cal], y_domain[is_cal], alpha=0.10)
             mondrian_summary = conformal.report(
                 p_domain[~is_cal], y_domain[~is_cal], mondrian_t, LOGGER
             )
@@ -500,13 +493,16 @@ def train(
     y_hold, p_hold = calibrated.holdout_calibration_
     reliability = calibration_report(y_hold, p_hold)
     LOGGER.info(
-        "Reliability on calibration hold-out, balanced scale "
-        "(curve never saw these points):"
+        "Reliability on calibration hold-out, balanced scale " "(curve never saw these points):"
     )
     for lo, hi, mean_pred, observed, n in reliability:
         LOGGER.info(
             "  p in [%.2f, %.2f): predicted %.3f, observed %.3f  (n=%d)",
-            lo, hi, mean_pred, observed, n,
+            lo,
+            hi,
+            mean_pred,
+            observed,
+            n,
         )
     max_gap = max((abs(m - o) for _, _, m, o, _ in reliability), default=0.0)
     LOGGER.info("  worst calibration gap: %.4f", max_gap)
@@ -514,9 +510,7 @@ def train(
     # ── Feature importance, measured on held-out spatial blocks ──
     rng = np.random.default_rng(seed)
     unique_blocks = np.unique(groups)
-    held_blocks = rng.choice(
-        unique_blocks, size=max(1, len(unique_blocks) // 5), replace=False
-    )
+    held_blocks = rng.choice(unique_blocks, size=max(1, len(unique_blocks) // 5), replace=False)
     hold = np.isin(groups, held_blocks)
     if hold.sum() < 500 or len(np.unique(y[hold])) < 2:
         hold = np.ones(y.shape, dtype=bool)
@@ -542,9 +536,7 @@ def train(
             "spatial_low_lying": asdict(lowlying_cv) if lowlying_cv else None,
         },
         "low_lying_dem_cutoff_m": low_cut,
-        "auc_inflation_from_spatial_autocorrelation": float(
-            random_cv.auc_roc - spatial_cv.auc_roc
-        ),
+        "auc_inflation_from_spatial_autocorrelation": float(random_cv.auc_roc - spatial_cv.auc_roc),
         "worst_calibration_gap_balanced_scale": float(max_gap),
         "domain_prevalence": domain_prevalence,
         "domain_pixels": int(sample["domain_pixels"]),
@@ -624,14 +616,13 @@ def predict_surface(
 
     output_path = output_path or (OUTPUT_DIR / "susceptibility.tif")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    uncertainty_path = output_path.with_name(
-        output_path.stem + "_uncertainty" + output_path.suffix
-    )
+    uncertainty_path = output_path.with_name(output_path.stem + "_uncertainty" + output_path.suffix)
 
     LOGGER.info("Predicting susceptibility over %dx%d grid...", height, width)
-    with rasterio.open(output_path, "w", **profile) as dst, rasterio.open(
-        uncertainty_path, "w", **profile
-    ) as unc_dst:
+    with (
+        rasterio.open(output_path, "w", **profile) as dst,
+        rasterio.open(uncertainty_path, "w", **profile) as unc_dst,
+    ):
         for n, window in enumerate(iter_stripes(height, width, stripe_rows)):
             X, idx, shape = build_matrix(window, aligned_dir, features)
             out = np.full(shape[0] * shape[1], profile["nodata"], dtype=np.float32)
@@ -689,15 +680,11 @@ def recalibrate_conformal(
 
     LOGGER.info("--- Marginal split conformal ---")
     marginal_t = conformal.fit(p_domain[is_cal], y_domain[is_cal], alpha=alpha)
-    marginal_summary = conformal.report(
-        p_domain[~is_cal], y_domain[~is_cal], marginal_t, LOGGER
-    )
+    marginal_summary = conformal.report(p_domain[~is_cal], y_domain[~is_cal], marginal_t, LOGGER)
 
     LOGGER.info("--- Class-conditional (Mondrian) conformal ---")
     mondrian_t = conformal.fit_mondrian(p_domain[is_cal], y_domain[is_cal], alpha=alpha)
-    mondrian_summary = conformal.report(
-        p_domain[~is_cal], y_domain[~is_cal], mondrian_t, LOGGER
-    )
+    mondrian_summary = conformal.report(p_domain[~is_cal], y_domain[~is_cal], mondrian_t, LOGGER)
 
     summary = dict(mondrian_summary)
     summary["marginal_variant"] = marginal_summary
@@ -771,11 +758,13 @@ def main() -> None:  # pragma: no cover
     parser.add_argument("--train", action="store_true", help="Train and persist the model")
     parser.add_argument("--predict", action="store_true", help="Write the susceptibility raster")
     parser.add_argument(
-        "--recalibrate-conformal", action="store_true",
+        "--recalibrate-conformal",
+        action="store_true",
         help="Redo conformal calibration against the saved model (no refit)",
     )
     parser.add_argument(
-        "--conformal", action="store_true",
+        "--conformal",
+        action="store_true",
         help="Write the conformal decision raster from an existing susceptibility map",
     )
     parser.add_argument("--alpha", type=float, default=0.10, help="Conformal miscoverage rate")
@@ -786,9 +775,7 @@ def main() -> None:  # pragma: no cover
     setup_logging(logging.INFO)
 
     if not (args.train or args.predict or args.conformal or args.recalibrate_conformal):
-        parser.error(
-            "Specify --train, --predict, --recalibrate-conformal and/or --conformal"
-        )
+        parser.error("Specify --train, --predict, --recalibrate-conformal and/or --conformal")
 
     if args.train:
         train(n_per_class=args.samples, seed=args.seed)

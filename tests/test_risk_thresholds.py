@@ -7,7 +7,6 @@ still worth pinning: the thresholds are properties of the fitted
 probabilities, and a mismatch between the table and the config is exactly the
 drift this module exists to prevent.
 """
-import pytest
 
 from config import RISK
 from risk_thresholds import CRITERIA
@@ -61,9 +60,9 @@ class TestConfigConsistency:
         them off the precision-recall curve.
         """
         derived = [RISK.safe, RISK.moderate, RISK.high, RISK.critical]
-        assert not all(abs(v * 100 - round(v * 100)) < 1e-9 for v in derived), (
-            "every threshold is a whole percentage point; were these derived?"
-        )
+        assert not all(
+            abs(v * 100 - round(v * 100)) < 1e-9 for v in derived
+        ), "every threshold is a whole percentage point; were these derived?"
 
     def test_thresholds_suit_a_low_prevalence_target(self):
         """

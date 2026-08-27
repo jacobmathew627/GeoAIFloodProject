@@ -27,6 +27,7 @@ that uses these layers.
 
 Run:  python src/osm_drainage.py --build
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,7 +36,7 @@ import logging
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 
@@ -109,11 +110,13 @@ def fetch(force: bool = False, timeout: int = 300) -> Path:
             continue
         kind = el.get("tags", {}).get("waterway", "unknown")
         counts[kind] = counts.get(kind, 0) + 1
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "LineString", "coordinates": coords},
-            "properties": {"waterway": kind, "osm_id": el.get("id")},
-        })
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": coords},
+                "properties": {"waterway": kind, "osm_id": el.get("id")},
+            }
+        )
 
     CACHE.write_text(
         json.dumps({"type": "FeatureCollection", "features": features}),
@@ -146,7 +149,10 @@ def build(aligned_dir: Optional[Path] = None, force: bool = False) -> Dict:
 
     channel = rasterize(
         [(g, 1) for g in gdf.geometry if g is not None and not g.is_empty],
-        out_shape=(H, W), transform=transform, fill=0, dtype="uint8",
+        out_shape=(H, W),
+        transform=transform,
+        fill=0,
+        dtype="uint8",
     ).astype(bool)
     LOGGER.info("  %d cells on a mapped channel", int(channel.sum()))
 
@@ -178,7 +184,10 @@ def build(aligned_dir: Optional[Path] = None, force: bool = False) -> Dict:
         vals = arr[district]
         LOGGER.info(
             "  %s -> median %.1f, p90 %.1f, max %.1f",
-            out_path.name, np.median(vals), np.percentile(vals, 90), vals.max(),
+            out_path.name,
+            np.median(vals),
+            np.percentile(vals, 90),
+            vals.max(),
         )
         written[name] = out_path.name
 
@@ -196,9 +205,7 @@ def build(aligned_dir: Optional[Path] = None, force: bool = False) -> Dict:
             "actually floods."
         ),
     }
-    (aligned_dir / "osm_drainage.json").write_text(
-        json.dumps(summary, indent=2), encoding="utf-8"
-    )
+    (aligned_dir / "osm_drainage.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary
 
 

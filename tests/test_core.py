@@ -4,6 +4,7 @@ Tests for configuration, data loading and visualisation.
 Several of these are regression tests for specific defects; those are named
 and commented so the behaviour is not "simplified" back out later.
 """
+
 import numpy as np
 import pytest
 
@@ -119,9 +120,9 @@ class TestLayerRegistry:
         """
         data = np.array([[5.0, 20.0, NODATA]], dtype=np.float32)
         out = _apply_layer_nodata_rules(data.copy(), "lulc")
-        assert out[0, 0] == 5.0          # valid class
-        assert out[0, 1] == NODATA       # class 20 does not exist
-        assert out[0, 2] == NODATA       # already nodata
+        assert out[0, 0] == 5.0  # valid class
+        assert out[0, 1] == NODATA  # class 20 does not exist
+        assert out[0, 2] == NODATA  # already nodata
 
     def test_rules_never_resurrect_nodata(self):
         data = np.full((3, 3), NODATA, dtype=np.float32)
@@ -195,8 +196,8 @@ class TestColormap:
 
         rgba = np.array(Image.open(io.BytesIO(base64.b64decode(encoded))))
         alpha = rgba[..., 3]
-        assert (alpha[:14, :] == 0).all()      # solidly nodata
-        assert (alpha[18:, :] == 200).all()    # solidly valid
+        assert (alpha[:14, :] == 0).all()  # solidly nodata
+        assert (alpha[18:, :] == 200).all()  # solidly valid
 
 
 class TestNodataMasking:
@@ -256,9 +257,7 @@ class TestRiskStats:
     BANDS = ("safe_pct", "moderate_pct", "high_pct", "severe_pct", "critical_pct")
 
     def test_percentages_sum_to_100(self):
-        data = np.array(
-            [[0.005, 0.05, 0.10], [0.20, 0.60, NODATA]], dtype=np.float32
-        )
+        data = np.array([[0.005, 0.05, 0.10], [0.20, 0.60, NODATA]], dtype=np.float32)
         stats = compute_risk_stats(data, RISK)
         assert sum(stats[k] for k in self.BANDS) == pytest.approx(100.0, abs=0.5)
 

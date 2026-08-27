@@ -6,6 +6,7 @@ accumulation arithmetic and the grid construction are tested directly. The
 accumulation window is what decides the constant that anchors every hazard
 map, so it is worth pinning.
 """
+
 import numpy as np
 import pytest
 
@@ -75,7 +76,7 @@ class TestMaxAccumulation:
         daily = np.array([0.0, 0.0, 5.0, 5.0, 5.0, 0.0])
         total, i = max_accumulation(daily, 3)
         assert i == 2
-        assert daily[i:i + 3].sum() == pytest.approx(total)
+        assert daily[i : i + 3].sum() == pytest.approx(total)
 
 
 class TestConfigConsistency:

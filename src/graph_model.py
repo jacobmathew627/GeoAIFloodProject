@@ -26,11 +26,12 @@ Whether this actually helps is an empirical question, and `compare()` answers
 it honestly: the same nodes, the same spatial-block folds, and a
 gradient-boosted model on identical node features as the baseline.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -63,9 +64,7 @@ class DirectedSAGELayer(nn.Module):
         count.index_add_(0, target, torch.ones_like(target, dtype=h.dtype))
         return out / count.clamp(min=1.0).unsqueeze(1)
 
-    def forward(
-        self, h: torch.Tensor, up: torch.Tensor, down: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, h: torch.Tensor, up: torch.Tensor, down: torch.Tensor) -> torch.Tensor:
         n = h.shape[0]
         return (
             self.self_lin(h)
@@ -80,16 +79,12 @@ class FlowGNN(nn.Module):
     def __init__(self, in_dim: int, hidden: int = 64, layers: int = 2, dropout: float = 0.2):
         super().__init__()
         dims = [in_dim] + [hidden] * layers
-        self.layers = nn.ModuleList(
-            DirectedSAGELayer(dims[i], dims[i + 1]) for i in range(layers)
-        )
+        self.layers = nn.ModuleList(DirectedSAGELayer(dims[i], dims[i + 1]) for i in range(layers))
         self.norms = nn.ModuleList(nn.LayerNorm(hidden) for _ in range(layers))
         self.dropout = nn.Dropout(dropout)
         self.head = nn.Linear(hidden, 1)
 
-    def forward(
-        self, x: torch.Tensor, up: torch.Tensor, down: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, up: torch.Tensor, down: torch.Tensor) -> torch.Tensor:
         h = x
         for layer, norm in zip(self.layers, self.norms):
             h = self.dropout(torch.relu(norm(layer(h, up, down))))
@@ -103,13 +98,13 @@ class FlowGNN(nn.Module):
 class GraphDataset:
     """Node features, soft labels and connectivity for the whole district."""
 
-    X: np.ndarray            # (n_nodes, n_features)
-    y: np.ndarray            # (n_nodes,) flooded area fraction in [0, 1]
-    up: np.ndarray           # (E, 2)
-    down: np.ndarray         # (E, 2)
-    row: np.ndarray          # (n_nodes,) mean row, for spatial blocking
-    col: np.ndarray          # (n_nodes,) mean col
-    weight: np.ndarray       # (n_nodes,) node area in cells
+    X: np.ndarray  # (n_nodes, n_features)
+    y: np.ndarray  # (n_nodes,) flooded area fraction in [0, 1]
+    up: np.ndarray  # (E, 2)
+    down: np.ndarray  # (E, 2)
+    row: np.ndarray  # (n_nodes,) mean row, for spatial blocking
+    col: np.ndarray  # (n_nodes,) mean col
+    weight: np.ndarray  # (n_nodes,) node area in cells
     features: List[str]
 
 
@@ -175,9 +170,7 @@ def train_gnn(
         model.eval()
         with torch.no_grad():
             val_logits = model(x, up, down)
-            val_loss = float(
-                (loss_fn(val_logits[va], y[va]) * w[va]).sum() / w[va].sum()
-            )
+            val_loss = float((loss_fn(val_logits[va], y[va]) * w[va]).sum() / w[va].sum())
 
         if val_loss < best_val - 1e-5:
             best_val, patience = val_loss, 0
@@ -205,7 +198,7 @@ def compare(
     n_splits: int = 5,
     block_px: int = 160,
     seed: int = 0,
-) -> Dict:
+) -> Tuple[Dict, np.ndarray, np.ndarray]:
     """
     Spatial-block comparison of the GNN against a tabular baseline.
 
@@ -220,13 +213,15 @@ def compare(
     if len(np.unique(y_bin)) < 2:
         raise ValueError("Binarised node labels are single-class; adjust positive_fraction")
 
-    blocks = (
-        (data.row // block_px).astype(np.int64) * 10_000
-        + (data.col // block_px).astype(np.int64)
+    blocks = (data.row // block_px).astype(np.int64) * 10_000 + (data.col // block_px).astype(
+        np.int64
     )
     LOGGER.info(
         "Node-level comparison: %d nodes, %d positive (%.1f%%), %d spatial blocks",
-        data.X.shape[0], int(y_bin.sum()), 100 * y_bin.mean(), len(np.unique(blocks)),
+        data.X.shape[0],
+        int(y_bin.sum()),
+        100 * y_bin.mean(),
+        len(np.unique(blocks)),
     )
 
     oof_gnn = np.full(y_bin.shape, np.nan)
@@ -248,9 +243,7 @@ def compare(
         # block, so it is not adjacent to the training nodes.
         tr_blocks = np.unique(blocks[tr])
         rng = np.random.default_rng(seed + k)
-        val_blocks = rng.choice(
-            tr_blocks, size=max(1, len(tr_blocks) // 5), replace=False
-        )
+        val_blocks = rng.choice(tr_blocks, size=max(1, len(tr_blocks) // 5), replace=False)
         is_val = np.isin(blocks, val_blocks)
         fit_idx = tr[~is_val[tr]]
         val_idx = tr[is_val[tr]]
@@ -261,15 +254,25 @@ def compare(
         oof_gnn[te] = preds[te]
 
         edgeless = GraphDataset(
-            X=data.X, y=data.y, up=no_edges, down=no_edges,
-            row=data.row, col=data.col, weight=data.weight, features=data.features,
+            X=data.X,
+            y=data.y,
+            up=no_edges,
+            down=no_edges,
+            row=data.row,
+            col=data.col,
+            weight=data.weight,
+            features=data.features,
         )
         _, mlp_preds = train_gnn(edgeless, fit_idx, val_idx, seed=seed + k)
         oof_mlp[te] = mlp_preds[te]
 
         tab = HistGradientBoostingClassifier(
-            max_iter=300, learning_rate=0.06, min_samples_leaf=10,
-            l2_regularization=1.0, early_stopping=True, random_state=seed + k,
+            max_iter=300,
+            learning_rate=0.06,
+            min_samples_leaf=10,
+            l2_regularization=1.0,
+            early_stopping=True,
+            random_state=seed + k,
         )
         tab.fit(data.X[fit_idx], y_bin[fit_idx])
         oof_tab[te] = tab.predict_proba(data.X[te])[:, 1]
@@ -310,11 +313,14 @@ def compare(
     ]:
         LOGGER.info(
             "  %s AUC-ROC=%.4f AUC-PR=%.4f",
-            name, results[key]["auc_roc"], results[key]["auc_pr"],
+            name,
+            results[key]["auc_roc"],
+            results[key]["auc_pr"],
         )
     LOGGER.info(
         "  graph contribution (edges ON - OFF): %+.4f AUC-ROC, %+.4f AUC-PR",
-        results["graph_contribution_auc"], results["graph_contribution_auc_pr"],
+        results["graph_contribution_auc"],
+        results["graph_contribution_auc_pr"],
     )
     LOGGER.info(
         "  GNN vs best tabular model:          %+.4f AUC-ROC",

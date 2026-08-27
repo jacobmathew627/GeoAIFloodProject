@@ -4,6 +4,7 @@ Tests for the live rainfall engine and the pluvial index.
 The properties that matter for a slider: evaluating a new rainfall must be
 cheap, monotonic, bounded, and must not resurrect nodata.
 """
+
 import numpy as np
 import pytest
 
@@ -57,11 +58,13 @@ class TestDepressionFill:
     """
 
     def test_fills_a_pit_to_its_rim(self):
-        elev = np.array([
-            [5.0, 5.0, 5.0],
-            [5.0, 1.0, 5.0],
-            [5.0, 5.0, 5.0],
-        ])
+        elev = np.array(
+            [
+                [5.0, 5.0, 5.0],
+                [5.0, 1.0, 5.0],
+                [5.0, 5.0, 5.0],
+            ]
+        )
         valid = np.ones_like(elev, dtype=bool)
         filled = fill_depressions(elev, valid)
         assert filled[1, 1] == pytest.approx(5.0)
@@ -220,9 +223,7 @@ class TestQuery:
 
         # Centre of a valid row
         x, y = grid.transform * (8.5, 6.5)
-        lon, lat = Transformer.from_crs(
-            grid.crs, "EPSG:4326", always_xy=True
-        ).transform(x, y)
+        lon, lat = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True).transform(x, y)
 
         r = query(grid, lat, lon, 150.0)
         assert r is not None
@@ -244,9 +245,7 @@ class TestPersistence:
         save(grid, tmp_path)
         restored = load(tmp_path)
 
-        np.testing.assert_allclose(
-            restored.susceptibility, grid.susceptibility, equal_nan=True
-        )
+        np.testing.assert_allclose(restored.susceptibility, grid.susceptibility, equal_nan=True)
         assert restored.shape == grid.shape
         assert restored.crs == grid.crs
         assert sorted(restored.basis) == sorted(grid.basis)

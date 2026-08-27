@@ -11,6 +11,7 @@ whole grid is ~2.2 GB, so nothing here ever materialises one: training reads
 one raster at a time and keeps only sampled pixels, and prediction works in
 horizontal stripes.
 """
+
 from __future__ import annotations
 
 import logging
@@ -261,7 +262,8 @@ def sample_domain_points(
     complete = np.isfinite(X).all(axis=1)
     LOGGER.info(
         "  domain sample: %d of %d drawn pixels complete",
-        int(complete.sum()), idx.size,
+        int(complete.sum()),
+        idx.size,
     )
 
     if not with_labels:
@@ -379,9 +381,7 @@ def sample_training_points(
     else:
         buffered = presence
     absence_pool = domain & gt_valid & ~buffered
-    LOGGER.info(
-        "  absence pool after %d-px buffer: %d", absence_buffer_px, absence_pool.sum()
-    )
+    LOGGER.info("  absence pool after %d-px buffer: %d", absence_buffer_px, absence_pool.sum())
 
     # 2. Stratify absences across strata of the conditioning variable.
     #
@@ -469,7 +469,10 @@ def sample_training_points(
     prevalence = presence_px / max(domain_px, 1)
     LOGGER.info(
         "  domain prevalence: %d / %d = %.5f (%.3f%%)",
-        presence_px, domain_px, prevalence, 100 * prevalence,
+        presence_px,
+        domain_px,
+        prevalence,
+        100 * prevalence,
     )
 
     return {

@@ -8,6 +8,7 @@ RASTER.nodata_value and guarantees that invalid pixels hold exactly that
 value. Callers test `data > -9000` rather than comparing floats for equality,
 because bilinear downsampling can perturb the sentinel slightly.
 """
+
 from __future__ import annotations
 
 import logging
@@ -95,9 +96,9 @@ def read_downsampled(
                 # holds a genuine source value, which is what identifies nodata
                 # reliably. Categorical layers stop here: any averaging would
                 # invent class codes that do not exist (a "class 3.5").
-                nearest = src.read(
-                    1, out_shape=out_shape, resampling=Resampling.nearest
-                ).astype(np.float32)
+                nearest = src.read(1, out_shape=out_shape, resampling=Resampling.nearest).astype(
+                    np.float32
+                )
                 # Continuous layers use AVERAGE, not bilinear. At this grid's
                 # downsampling ratio (7374 -> 1000) bilinear interpolates from
                 # a handful of source pixels and behaves close to sampling, so
@@ -109,9 +110,9 @@ def read_downsampled(
                 smooth = (
                     None
                     if categorical
-                    else src.read(
-                        1, out_shape=out_shape, resampling=Resampling.average
-                    ).astype(np.float32)
+                    else src.read(1, out_shape=out_shape, resampling=Resampling.average).astype(
+                        np.float32
+                    )
                 )
                 transform = src.transform * src.transform.scale(
                     src.width / new_w, src.height / new_h
@@ -258,9 +259,7 @@ def load_hazard_maps(
         if reference_shape is None:
             reference_shape, meta = data.shape, m
         elif data.shape != reference_shape:
-            LOGGER.warning(
-                "Skipping %s: shape %s != %s", path.name, data.shape, reference_shape
-            )
+            LOGGER.warning("Skipping %s: shape %s != %s", path.name, data.shape, reference_shape)
             continue
 
         maps[float(mm)] = data
@@ -277,9 +276,7 @@ def load_susceptibility(
 ) -> Tuple[Optional[np.ndarray], Optional[Dict[str, Any]]]:
     """Load the rainfall-independent susceptibility surface."""
     output_dir = output_dir or OUTPUT_DIR
-    return read_downsampled(
-        output_dir / "susceptibility.tif", layer_kind="hazard", max_dim=max_dim
-    )
+    return read_downsampled(output_dir / "susceptibility.tif", layer_kind="hazard", max_dim=max_dim)
 
 
 def load_conformal_sets(

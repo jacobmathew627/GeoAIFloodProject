@@ -48,7 +48,51 @@ include = ["src*"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# Pre-rewrite architecture, kept only as historical record (see
+# docs/artefacts.md). Each one imports nothing that still exists -- they read
+# from processed/, which predates align_data.py's rewrite and data_aligned/,
+# and nothing in the active pipeline imports any of them. They cannot run
+# regardless of lint status, so holding them to current style rules buys
+# nothing; excluded rather than silently left to break CI forever.
+extend-exclude = [
+    "src/data_loader.py",
+    "src/hydro_geomorph.py",
+    "src/inference.py",
+    "src/preprocessing.py",
+    # Trains the archived Keras UNet (docs/artefacts.md). tensorflow is not
+    # an installed dependency of this project (confirmed: `import tensorflow`
+    # fails in .venv) and never has been in requirements.txt/pyproject.toml,
+    # so this cannot run here regardless of lint status.
+    "src/train_keras_unet.py",
+    # The deprecated mock-MCDA generator (docs/artefacts.md) -- raises
+    # SystemExit on import on purpose, so its body never executes either way.
+    "src/generate_intelligent_predictions.py",
+]
 
 [tool.black]
 line-length = 100
 target-version = ["py310"]
+
+[tool.mypy]
+# `src/` modules import each other by bare name (`from config import ...`),
+# not as a package (`from src.config import ...`), which is why CI sets
+# MYPYPATH=src. But running `mypy src/` at the same time makes mypy discover
+# every file twice -- once as `src.config` via directory-based package
+# discovery, once as bare `config` via MYPYPATH -- and it refuses to check
+# anything with "Source file found twice under different module names".
+# explicit_package_bases is mypy's own documented fix: treat src/ as a
+# package root without forcing a `src.` prefix onto every module name.
+explicit_package_bases = true
+mypy_path = "src"
+# Same dead-code list as [tool.ruff] extend-exclude, for the same reason:
+# these cannot run in this environment (missing tensorflow, or superseded
+# by align_data.py's rewrite with no replacement for processed/), so type
+# errors in them are not actionable. See docs/artefacts.md.
+exclude = [
+    "^src/data_loader\\.py$",
+    "^src/hydro_geomorph\\.py$",
+    "^src/inference\\.py$",
+    "^src/preprocessing\\.py$",
+    "^src/train_keras_unet\\.py$",
+    "^src/generate_intelligent_predictions\\.py$",
+]

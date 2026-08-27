@@ -26,6 +26,7 @@ feature_stack reads them exactly like any other conditioning factor.
 
 Run:  python src/derive_features.py
 """
+
 from __future__ import annotations
 
 import logging
@@ -56,7 +57,11 @@ def _write(path: Path, values: np.ndarray, valid: np.ndarray, profile: dict) -> 
     v = values[valid]
     LOGGER.info(
         "  wrote %s  valid=%.2fM range=[%.3f, %.3f] mean=%.3f",
-        path.name, valid.sum() / 1e6, v.min(), v.max(), v.mean(),
+        path.name,
+        valid.sum() / 1e6,
+        v.min(),
+        v.max(),
+        v.mean(),
     )
 
 

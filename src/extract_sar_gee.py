@@ -1,7 +1,5 @@
 import ee
 import os
-import rasterio
-import numpy as np
 
 # NOTE: this script takes a *median composite* over a date range, which is the
 # wrong reduction for flood mapping -- a median over 10-25 Aug 2018 averages
@@ -17,8 +15,9 @@ import numpy as np
 
 # CONFIGURATION
 # Using FAO/GAUL for precise Ernakulam district boundary
-DISTRICT_NAME = 'Ernakulam'
+DISTRICT_NAME = "Ernakulam"
 OUTPUT_DIR = "processed"
+
 
 def extract_sar_sigma0(start_date, end_date, suffix):
     """
@@ -27,41 +26,42 @@ def extract_sar_sigma0(start_date, end_date, suffix):
     print(f"\nProcessing SAR data for {start_date} to {end_date}...")
 
     # Get District Boundary
-    roi = ee.FeatureCollection("FAO/GAUL/2015/level2") \
-        .filter(ee.Filter.eq('ADM2_NAME', DISTRICT_NAME)) \
+    roi = (
+        ee.FeatureCollection("FAO/GAUL/2015/level2")
+        .filter(ee.Filter.eq("ADM2_NAME", DISTRICT_NAME))
         .geometry()
+    )
 
     # Sentinel-1 GRD collection
-    collection = ee.ImageCollection('COPERNICUS/S1_GRD') \
-        .filterBounds(roi) \
-        .filterDate(start_date, end_date) \
-        .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV')) \
-        .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH')) \
-        .filter(ee.Filter.eq('instrumentMode', 'IW'))
+    collection = (
+        ee.ImageCollection("COPERNICUS/S1_GRD")
+        .filterBounds(roi)
+        .filterDate(start_date, end_date)
+        .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
+        .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH"))
+        .filter(ee.Filter.eq("instrumentMode", "IW"))
+    )
 
     # Median composite
     composite = collection.median().clip(roi)
-    
+
     # Export VV and VH separately to stay under the 50MB direct download limit
-    for band in ['VV', 'VH']:
+    for band in ["VV", "VH"]:
         band_image = composite.select(band)
         out_path = os.path.join(OUTPUT_DIR, f"SAR_{suffix}_{band}_aligned.tif")
-        
+
         print(f"  Exporting {band} to {out_path}...")
         try:
             import geemap  # optional dependency; see the note at the top
 
             geemap.ee_export_image(
-                band_image,
-                filename=out_path,
-                scale=30,
-                region=roi,
-                file_per_band=False
+                band_image, filename=out_path, scale=30, region=roi, file_per_band=False
             )
         except Exception as e:
             print(f"  Error exporting {band}: {e}")
-    
+
     return True
+
 
 def authenticate_and_run():
     """
@@ -88,12 +88,13 @@ def authenticate_and_run():
         return
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
+
     # Flood Peak (August 2018)
-    extract_sar_sigma0('2018-08-10', '2018-08-25', 'flood_2018')
-    
+    extract_sar_sigma0("2018-08-10", "2018-08-25", "flood_2018")
+
     # Baseline (Dry Season - March 2018)
-    extract_sar_sigma0('2018-03-01', '2018-03-31', 'baseline_2018')
+    extract_sar_sigma0("2018-03-01", "2018-03-31", "baseline_2018")
+
 
 if __name__ == "__main__":
     authenticate_and_run()

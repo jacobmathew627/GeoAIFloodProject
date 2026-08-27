@@ -38,6 +38,7 @@ ramSeraph/india_natural_disasters, CC0 1.0.
 
 Run:  python src/ndem_labels.py --build
 """
+
 from __future__ import annotations
 
 import argparse
@@ -191,8 +192,11 @@ def build(events: Optional[List[str]] = None, aligned_dir: Optional[Path] = None
         summary["events"][event] = entry
         LOGGER.info(
             "  %s -> %s | %.1f km2 in domain, %.1f km2 urban (%.1f%%), prevalence %.3f%%",
-            event, path.name, entry["flooded_km2_in_domain"],
-            entry["flooded_km2_urban"], 100 * entry["urban_share"],
+            event,
+            path.name,
+            entry["flooded_km2_in_domain"],
+            entry["flooded_km2_urban"],
+            100 * entry["urban_share"],
             100 * entry["prevalence_in_domain"],
         )
 

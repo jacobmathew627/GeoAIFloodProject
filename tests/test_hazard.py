@@ -5,6 +5,7 @@ The central guarantees: hazard reduces to susceptibility at the reference
 event, increases monotonically with rainfall, stays a probability, and never
 turns a nodata pixel into a valid one.
 """
+
 import numpy as np
 import pytest
 
@@ -41,13 +42,9 @@ class TestLogitSigmoid:
 
 
 class TestCombine:
-    def test_reduces_to_susceptibility_at_reference_event(
-        self, susceptibility, curve_number_grid
-    ):
+    def test_reduces_to_susceptibility_at_reference_event(self, susceptibility, curve_number_grid):
         """At P = P_ref the model must reproduce the calibration event."""
-        hazard = combine(
-            susceptibility, curve_number_grid, RAINFALL.reference_event_mm
-        )
+        hazard = combine(susceptibility, curve_number_grid, RAINFALL.reference_event_mm)
         both = np.isfinite(hazard) & np.isfinite(susceptibility)
         np.testing.assert_allclose(hazard[both], susceptibility[both], atol=1e-5)
 
@@ -57,9 +54,9 @@ class TestCombine:
             hazard = combine(susceptibility, curve_number_grid, depth)
             finite = np.isfinite(hazard)
             if previous is not None:
-                assert (hazard[finite] >= previous[finite] - 1e-6).all(), (
-                    f"hazard decreased going to {depth} mm"
-                )
+                assert (
+                    hazard[finite] >= previous[finite] - 1e-6
+                ).all(), f"hazard decreased going to {depth} mm"
             previous = hazard
 
     def test_stays_a_probability(self, susceptibility, curve_number_grid):
@@ -69,9 +66,7 @@ class TestCombine:
             assert (finite >= 0.0).all()
             assert (finite <= 1.0).all()
 
-    def test_less_rain_than_reference_lowers_hazard(
-        self, susceptibility, curve_number_grid
-    ):
+    def test_less_rain_than_reference_lowers_hazard(self, susceptibility, curve_number_grid):
         low = combine(susceptibility, curve_number_grid, 50.0)
         ref = combine(susceptibility, curve_number_grid, RAINFALL.reference_event_mm)
         both = np.isfinite(low) & np.isfinite(ref)
@@ -122,31 +117,27 @@ class TestCombineWithRoutedRatio:
         both = np.isfinite(hazard) & np.isfinite(susceptibility)
         np.testing.assert_allclose(hazard[both], susceptibility[both], atol=1e-5)
 
-    def test_explicit_ratio_overrides_the_pointwise_one(
-        self, susceptibility, curve_number_grid
-    ):
+    def test_explicit_ratio_overrides_the_pointwise_one(self, susceptibility, curve_number_grid):
         """A routed ratio that differs from the pointwise one at this
         rainfall must actually change the result -- otherwise the parameter
         is being silently ignored."""
         pointwise = combine(susceptibility, curve_number_grid, 200.0)
         routed = combine(
-            susceptibility, curve_number_grid, 200.0,
+            susceptibility,
+            curve_number_grid,
+            200.0,
             runoff_ratio=np.full_like(susceptibility, 5.0),
         )
         both = np.isfinite(pointwise) & np.isfinite(routed)
         assert not np.allclose(pointwise[both], routed[both])
 
-    def test_routed_ratio_still_stays_a_probability(
-        self, susceptibility, curve_number_grid
-    ):
+    def test_routed_ratio_still_stays_a_probability(self, susceptibility, curve_number_grid):
         ratio = np.full_like(susceptibility, 50.0)  # a large, catchment-inflated ratio
         hazard = combine(susceptibility, curve_number_grid, 300.0, runoff_ratio=ratio)
         finite = hazard[np.isfinite(hazard)]
         assert (finite >= 0.0).all() and (finite <= 1.0).all()
 
-    def test_routed_ratio_respects_nodata_the_same_way(
-        self, susceptibility, curve_number_grid
-    ):
+    def test_routed_ratio_respects_nodata_the_same_way(self, susceptibility, curve_number_grid):
         ratio = np.full_like(susceptibility, 2.0)
         hazard = combine(susceptibility, curve_number_grid, 200.0, runoff_ratio=ratio)
         assert np.isnan(hazard[2, 0])  # NaN susceptibility, same pixel as the other test
@@ -196,9 +187,5 @@ class TestBlendScenarios:
         assert all(b >= a - 1e-6 for a, b in zip(values, values[1:]))
 
     def test_endpoints_are_exact(self, scenarios):
-        np.testing.assert_allclose(
-            blend_scenarios(scenarios, 100.0)[0, 0], 0.1, atol=1e-6
-        )
-        np.testing.assert_allclose(
-            blend_scenarios(scenarios, 200.0)[0, 0], 0.3, atol=1e-6
-        )
+        np.testing.assert_allclose(blend_scenarios(scenarios, 100.0)[0, 0], 0.1, atol=1e-6)
+        np.testing.assert_allclose(blend_scenarios(scenarios, 200.0)[0, 0], 0.3, atol=1e-6)

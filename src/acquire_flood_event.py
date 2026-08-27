@@ -52,6 +52,7 @@ airport aprons, the backwaters); the drop criterion is what isolates change.
 Terrain masks then remove the classic false positives: radar shadow on slopes
 and anything too high above the drainage network to plausibly inundate.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -167,7 +168,11 @@ def acquire(event: str, project: str, scale: int = 30, out_dir: str = "GeoAI_New
     n_event = event_col.size().getInfo()
     LOGGER.info(
         "  %s: %d baseline scenes (%s..%s), %d event scenes (%s..%s)",
-        event, n_base, *EVENTS[event]["baseline"], n_event, *EVENTS[event]["event"],
+        event,
+        n_base,
+        *EVENTS[event]["baseline"],
+        n_event,
+        *EVENTS[event]["event"],
     )
     if n_event == 0:
         raise RuntimeError(
@@ -175,9 +180,7 @@ def acquire(event: str, project: str, scale: int = 30, out_dir: str = "GeoAI_New
             "or drop the DESCENDING orbit filter."
         )
     if n_base < 2:
-        LOGGER.warning(
-            "  only %d baseline scene(s); the median baseline will be noisy", n_base
-        )
+        LOGGER.warning("  only %d baseline scene(s); the median baseline will be noisy", n_base)
 
     area_km2 = (
         flood.multiply(ee.Image.pixelArea())
@@ -192,12 +195,18 @@ def acquire(event: str, project: str, scale: int = 30, out_dir: str = "GeoAI_New
     # getDownloadURL rather than geemap: one fewer heavy dependency, and the
     # mask is well inside the 32 MB response limit (~2.7M pixels of uint8 over
     # this district at 30 m).
-    url = flood.unmask(0).toByte().getDownloadURL({
-        "scale": scale,
-        "region": roi,
-        "format": "GEO_TIFF",
-        "crs": "EPSG:32643",
-    })
+    url = (
+        flood.unmask(0)
+        .toByte()
+        .getDownloadURL(
+            {
+                "scale": scale,
+                "region": roi,
+                "format": "GEO_TIFF",
+                "crs": "EPSG:32643",
+            }
+        )
+    )
     with urllib.request.urlopen(url, timeout=600) as response, open(path, "wb") as f:
         shutil.copyfileobj(response, f)
 
@@ -233,7 +242,9 @@ def align(event: str, aligned_dir: Optional[Path] = None, out_dir: str = "GeoAI_
     aligned_dir = aligned_dir or ALIGNED_DIR
     src_path = Path(out_dir) / f"Flood_Extent_{event}.tif"
     if not src_path.exists():
-        raise FileNotFoundError(f"{src_path} not found. Run --event {event} first (without --align).")
+        raise FileNotFoundError(
+            f"{src_path} not found. Run --event {event} first (without --align)."
+        )
 
     master = grid_profile(aligned_dir)
     H, W = master["height"], master["width"]
@@ -264,7 +275,9 @@ def align(event: str, aligned_dir: Optional[Path] = None, out_dir: str = "GeoAI_
     px_km2 = (RASTER.cell_size / 1000.0) ** 2
     LOGGER.info(
         "  %s -> %d flooded px (%.2f km2) on the master grid",
-        out_path.name, int(flooded.sum()), float(flooded.sum()) * px_km2,
+        out_path.name,
+        int(flooded.sum()),
+        float(flooded.sum()) * px_km2,
     )
     return out_path
 
@@ -281,12 +294,13 @@ def main() -> None:  # pragma: no cover
         "--project",
         default=os.environ.get("EARTHENGINE_PROJECT") or os.environ.get("EE_PROJECT"),
         help="Earth Engine Cloud project ID. Defaults to $EARTHENGINE_PROJECT "
-             "or $EE_PROJECT. Register one at "
-             "https://code.earthengine.google.com/register",
+        "or $EE_PROJECT. Register one at "
+        "https://code.earthengine.google.com/register",
     )
     parser.add_argument("--scale", type=int, default=30)
     parser.add_argument(
-        "--align", action="store_true",
+        "--align",
+        action="store_true",
         help="Resample an already-acquired extent onto the master grid instead of fetching",
     )
     args = parser.parse_args()

@@ -11,6 +11,7 @@ Two things to know about the arrays passed in here:
     full-resolution counts. Any area figure must therefore be derived from the
     array's own affine transform, never from an assumed cell size.
 """
+
 from __future__ import annotations
 
 import base64
@@ -40,12 +41,13 @@ FLOOD_COLOR_STOPS: List[Tuple[float, str]] = list(VIZ.flood_colors)
 FLOOD_COLORMAP = LinearSegmentedColormap.from_list("RiskRamp", FLOOD_COLOR_STOPS)
 
 # RGB form of the same ramp, for the byte-level colormap used by the API.
+def _hex_to_rgb(hex_colour: str) -> Tuple[int, int, int]:
+    h = hex_colour.lstrip("#")
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+
 FLOOD_COLORMAP_RGB: List[Tuple[float, Tuple[int, int, int]]] = [
-    (
-        stop,
-        tuple(int(hex_colour.lstrip("#")[i: i + 2], 16) for i in (0, 2, 4)),
-    )
-    for stop, hex_colour in FLOOD_COLOR_STOPS
+    (stop, _hex_to_rgb(hex_colour)) for stop, hex_colour in FLOOD_COLOR_STOPS
 ]
 
 
@@ -133,11 +135,11 @@ def prob_to_png_b64(prob: np.ndarray, max_dim: int = 1024) -> str:
         # them into the valid range and paint a halo around every hole.
         valid = (prob > -9000).astype(np.uint8)
         valid_small = np.array(
-            Image.fromarray(valid, mode="L").resize((new_w, new_h), Image.NEAREST)
+            Image.fromarray(valid, mode="L").resize((new_w, new_h), Image.Resampling.NEAREST)
         )
         filled = np.where(prob > -9000, prob, 0.0).astype(np.float32)
         values_small = np.array(
-            Image.fromarray(filled, mode="F").resize((new_w, new_h), Image.BILINEAR)
+            Image.fromarray(filled, mode="F").resize((new_w, new_h), Image.Resampling.BILINEAR)
         )
         prob_small = np.where(valid_small > 0, values_small, NODATA).astype(np.float32)
     else:
@@ -171,10 +173,7 @@ RISK_BANDS = [
 
 def risk_band_masks(valid: np.ndarray, risk_cfg) -> Dict[str, np.ndarray]:
     """Boolean mask per risk band. The masks partition `valid` exactly."""
-    edges = [
-        getattr(risk_cfg, attr) if attr else None
-        for _, attr in RISK_BANDS
-    ]
+    edges = [getattr(risk_cfg, attr) if attr else None for _, attr in RISK_BANDS]
     masks = {}
     for i, (name, _) in enumerate(RISK_BANDS):
         lower = edges[i]
@@ -225,7 +224,7 @@ def create_legend_html(title: str, items: List[Tuple[str, str]]) -> str:
     """HTML legend block for a Folium map."""
     html = (
         '<div style="position: fixed; bottom: 50px; left: 50px; width: 230px; '
-        'height: auto; border: 2px solid grey; z-index: 9999; font-size: 14px; '
+        "height: auto; border: 2px solid grey; z-index: 9999; font-size: 14px; "
         'background-color: white; opacity: 0.9; padding: 10px;">'
         f"<b>{title}</b><br>"
     )
@@ -447,14 +446,12 @@ def create_conformal_visualization(
     for code, (hex_colour, _) in CONFORMAL_COLORS.items():
         pixels = codes == code
         h = hex_colour.lstrip("#")
-        image_rgba[pixels, :3] = [int(h[i: i + 2], 16) / 255.0 for i in (0, 2, 4)]
+        image_rgba[pixels, :3] = [int(h[i : i + 2], 16) / 255.0 for i in (0, 2, 4)]
         known |= pixels
 
     image_rgba[..., 3] = np.where(hidden | ~known, 0.0, 0.75)
 
-    legend_items = [
-        (label, colour) for code, (colour, label) in sorted(CONFORMAL_COLORS.items())
-    ]
+    legend_items = [(label, colour) for code, (colour, label) in sorted(CONFORMAL_COLORS.items())]
     return image_rgba, legend_items
 
 
@@ -463,8 +460,7 @@ def create_conformal_visualization(
 #: calibrated while the other is not, so they must not read as the same scale.
 PLUVIAL_COLORMAP = LinearSegmentedColormap.from_list(
     "PluvialRamp",
-    [(0.00, "#f7f4f9"), (0.25, "#d0d1e6"), (0.50, "#a6bddb"),
-     (0.75, "#3690c0"), (1.00, "#034e7b")],
+    [(0.00, "#f7f4f9"), (0.25, "#d0d1e6"), (0.50, "#a6bddb"), (0.75, "#3690c0"), (1.00, "#034e7b")],
 )
 
 
@@ -532,7 +528,7 @@ def _binary_visualization(
 
     def to_rgb(hex_colour: str):
         h = hex_colour.lstrip("#")
-        return [int(h[i: i + 2], 16) / 255.0 for i in (0, 2, 4)]
+        return [int(h[i : i + 2], 16) / 255.0 for i in (0, 2, 4)]
 
     image_rgba = np.zeros((*values.shape, 4), dtype=np.float32)
     image_rgba[positive, :3] = to_rgb(true_hex)

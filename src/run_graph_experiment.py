@@ -9,6 +9,7 @@ connectivity is available as structure.
 
 Run:  python src/run_graph_experiment.py
 """
+
 from __future__ import annotations
 
 import json
@@ -17,7 +18,6 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import rasterio
 from rasterio.enums import Resampling
 from rasterio.warp import reproject
 
@@ -123,11 +123,15 @@ def build_dataset(aligned_dir: Optional[Path] = None, min_area_km2: float = 0.5)
     )
     LOGGER.info(
         "  dataset: %d nodes, %d upstream edges, %d downstream edges",
-        data.X.shape[0], len(data.up), len(data.down),
+        data.X.shape[0],
+        len(data.up),
+        len(data.down),
     )
     LOGGER.info(
         "  node flooded-fraction: mean %.4f, p95 %.4f, max %.4f",
-        data.y.mean(), np.percentile(data.y, 95), data.y.max(),
+        data.y.mean(),
+        np.percentile(data.y, 95),
+        data.y.max(),
     )
     return data, graph, net
 

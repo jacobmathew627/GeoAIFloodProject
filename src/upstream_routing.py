@@ -48,6 +48,7 @@ the district boundary.
 Run:  python src/upstream_routing.py --build
       python src/upstream_routing.py --validate
 """
+
 from __future__ import annotations
 
 import argparse
@@ -91,25 +92,29 @@ SNAP_RADIUS_M = 1000.0
 PROBES: Tuple[Dict, ...] = (
     {
         "name": "Periyar at Aluva",
-        "lat": 10.1076, "lon": 76.3516,
+        "lat": 10.1076,
+        "lon": 76.3516,
         "expected_km2": 5000.0,
         "source": "Periyar basin 5,398 km2 total; Aluva is near the downstream limit",
     },
     {
         "name": "Periyar at Neriamangalam",
-        "lat": 10.0631, "lon": 76.7811,
+        "lat": 10.0631,
+        "lon": 76.7811,
         "expected_km2": 3300.0,
         "source": "Upstream of the Muvattupuzha confluence",
     },
     {
         "name": "Chalakudy at Chalakudy town",
-        "lat": 10.3070, "lon": 76.3320,
+        "lat": 10.3070,
+        "lon": 76.3320,
         "expected_km2": 1400.0,
         "source": "Chalakudy basin 1,704 km2 total",
     },
     {
         "name": "Muvattupuzha at Muvattupuzha",
-        "lat": 9.9790, "lon": 76.5790,
+        "lat": 9.9790,
+        "lon": 76.5790,
         "expected_km2": 1100.0,
         "source": "Muvattupuzha basin 1,554 km2 total",
     },
@@ -152,9 +157,7 @@ def route(
     dem_path = dem_path or (GEOAI_NEW_DIR / DEM_NAME)
     work_dir = work_dir or WORK_DIR
     if not dem_path.exists():
-        raise FileNotFoundError(
-            f"{dem_path} not found. Run: python src/upstream_dem.py --build"
-        )
+        raise FileNotFoundError(f"{dem_path} not found. Run: python src/upstream_dem.py --build")
     work_dir.mkdir(parents=True, exist_ok=True)
 
     accum = work_dir / "accum_area.tif"
@@ -174,7 +177,8 @@ def route(
 
     LOGGER.info(
         "Breaching depressions (least cost, max %d cells = %.1f km)...",
-        breach_dist, breach_dist * 30.0 / 1000.0,
+        breach_dist,
+        breach_dist * 30.0 / 1000.0,
     )
     rc = wbt.breach_depressions_least_cost(
         dem=DEM_NAME, output=breached, dist=breach_dist, fill=True
@@ -183,9 +187,7 @@ def route(
         raise RuntimeError(f"breach_depressions_least_cost failed (code {rc})")
 
     LOGGER.info("Computing D8 flow accumulation in catchment-area units...")
-    rc = wbt.d8_flow_accumulation(
-        i=breached, output=accum.name, out_type="catchment area"
-    )
+    rc = wbt.d8_flow_accumulation(i=breached, output=accum.name, out_type="catchment area")
     if rc != 0:
         raise RuntimeError(f"d8_flow_accumulation failed (code {rc})")
 
@@ -234,16 +236,23 @@ def validate(
         row, col = int(row), int(col)
 
         if not (0 <= row < H and 0 <= col < W):
-            results.append({**p, "found_km2": None, "ratio": None,
-                            "note": "outside the routed grid"})
+            results.append(
+                {**p, "found_km2": None, "ratio": None, "note": "outside the routed grid"}
+            )
             continue
 
         r0, r1 = max(0, row - rad), min(H, row + rad + 1)
         c0, c1 = max(0, col - rad), min(W, col + rad + 1)
         win = area[r0:r1, c0:c1]
         if not np.isfinite(win).any():
-            results.append({**p, "found_km2": None, "ratio": None,
-                            "note": "no valid accumulation in the snap window"})
+            results.append(
+                {
+                    **p,
+                    "found_km2": None,
+                    "ratio": None,
+                    "note": "no valid accumulation in the snap window",
+                }
+            )
             continue
 
         flat = int(np.nanargmax(win))
@@ -253,30 +262,35 @@ def validate(
         snap_m = float(np.hypot((r0 + wr) - row, (c0 + wc) - col) * cell_m)
         ratio = found_km2 / p["expected_km2"] if p["expected_km2"] else None
 
-        results.append({
-            "name": p["name"],
-            "expected_km2": p["expected_km2"],
-            "found_km2": round(found_km2, 1),
-            "ratio": round(ratio, 3) if ratio is not None else None,
-            "snapped_m": round(snap_m, 0),
-            "source": p["source"],
-        })
+        results.append(
+            {
+                "name": p["name"],
+                "expected_km2": p["expected_km2"],
+                "found_km2": round(found_km2, 1),
+                "ratio": round(ratio, 3) if ratio is not None else None,
+                "snapped_m": round(snap_m, 0),
+                "source": p["source"],
+            }
+        )
 
     LOGGER.info("")
-    LOGGER.info(
-        "%-32s %12s %12s %8s %9s", "probe", "published", "routed", "ratio", "snapped"
-    )
+    LOGGER.info("%-32s %12s %12s %8s %9s", "probe", "published", "routed", "ratio", "snapped")
     LOGGER.info("-" * 78)
     for r in results:
         if r.get("found_km2") is None:
-            LOGGER.info("%-32s %9.0f km2 %12s", r["name"], r["expected_km2"],
-                        r.get("note", "failed"))
+            LOGGER.info(
+                "%-32s %9.0f km2 %12s", r["name"], r["expected_km2"], r.get("note", "failed")
+            )
             continue
         flag = "" if RATIO_OK[0] <= r["ratio"] <= RATIO_OK[1] else "   <- OUT OF RANGE"
         LOGGER.info(
             "%-32s %9.0f km2 %9.0f km2 %8.2f %7.0f m%s",
-            r["name"], r["expected_km2"], r["found_km2"], r["ratio"],
-            r["snapped_m"], flag,
+            r["name"],
+            r["expected_km2"],
+            r["found_km2"],
+            r["ratio"],
+            r["snapped_m"],
+            flag,
         )
     return results
 
@@ -334,8 +348,11 @@ def align(
     if vals.size:
         LOGGER.info(
             "  %s -> median %.2f km2, p90 %.1f, p99.9 %.0f, max %.0f",
-            out_path.name, np.median(vals), np.percentile(vals, 90),
-            np.percentile(vals, 99.9), vals.max(),
+            out_path.name,
+            np.median(vals),
+            np.percentile(vals, 90),
+            np.percentile(vals, 99.9),
+            vals.max(),
         )
     return out_path
 
@@ -348,8 +365,9 @@ def build(force: bool = False) -> Dict:
     usable = [c for c in checks if c.get("ratio") is not None]
     passing = [c for c in usable if RATIO_OK[0] <= c["ratio"] <= RATIO_OK[1]]
     LOGGER.info("")
-    LOGGER.info("%d of %d probes within %.1fx-%.1fx of published",
-                len(passing), len(checks), *RATIO_OK)
+    LOGGER.info(
+        "%d of %d probes within %.1fx-%.1fx of published", len(passing), len(checks), *RATIO_OK
+    )
 
     aligned = None
     if len(passing) >= max(2, len(checks) // 2):

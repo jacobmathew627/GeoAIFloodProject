@@ -36,16 +36,25 @@ them would launder the weaker validation into the stronger one's credibility:
             records, since none exist for this district yet. Use it to rank,
             never as a probability.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import numpy as np
 
 from config import ALIGNED_DIR, HYDRO, MODELS_DIR, OUTPUT_DIR, RAINFALL, RASTER
+
+if TYPE_CHECKING:
+    # Only for type-checking: importing rasterio at module scope here would
+    # be a real dependency just to name two types. `transform`/`bounds` were
+    # annotated as `object` before, which is why mypy could not see
+    # `.bottom`/`.right`/`.top`/`~` on them despite both working at runtime.
+    from affine import Affine
+    from rasterio.coords import BoundingBox
 
 LOGGER = logging.getLogger("geoai_flood")
 
@@ -66,16 +75,16 @@ CACHE_NAME = "live_model.npz"
 class LiveGrid:
     """Everything rainfall-independent, on the display grid."""
 
-    susceptibility: np.ndarray        # (H, W) in [0,1], NaN outside the domain
-    curve_number: np.ndarray          # (H, W) AMC-adjusted CN
-    basis: Dict[int, np.ndarray]      # class -> upstream cell count
+    susceptibility: np.ndarray  # (H, W) in [0,1], NaN outside the domain
+    curve_number: np.ndarray  # (H, W) AMC-adjusted CN
+    basis: Dict[int, np.ndarray]  # class -> upstream cell count
     classes: np.ndarray
     tan_slope: np.ndarray
     cell_area_m2: float
     cell_width_m: float
-    transform: object
+    transform: "Affine"
     crs: str
-    bounds: object
+    bounds: "BoundingBox"
     shape: Tuple[int, int]
 
     # Percentiles of the pluvial raw score at the reference event, used to
@@ -114,15 +123,15 @@ def build(max_dim: int = 1000, aligned_dir: Optional[Path] = None) -> LiveGrid:
         near = src.read(1, out_shape=(out_h, out_w), resampling=Resampling.nearest)
         avg = src.read(1, out_shape=(out_h, out_w), resampling=Resampling.average)
         nd = src.nodata if src.nodata is not None else NODATA
-        transform = src.transform * src.transform.scale(
-            src.width / out_w, src.height / out_h
-        )
+        transform = src.transform * src.transform.scale(src.width / out_w, src.height / out_h)
         crs, bounds = str(src.crs), src.bounds
 
     ok = np.isfinite(near) & (near != np.float32(nd))
     susceptibility = np.where(ok, np.clip(avg, 0.0, 1.0), np.nan).astype(np.float32)
     shape = susceptibility.shape
-    LOGGER.info("  display grid %s, %.2fM valid cells", shape, np.isfinite(susceptibility).sum() / 1e6)
+    LOGGER.info(
+        "  display grid %s, %.2fM valid cells", shape, np.isfinite(susceptibility).sum() / 1e6
+    )
 
     # -- land cover and slope on the same grid --
     def load(name, resampling):
@@ -154,10 +163,17 @@ def build(max_dim: int = 1000, aligned_dir: Optional[Path] = None) -> LiveGrid:
 
     px_w = abs(transform.a)
     grid = LiveGrid(
-        susceptibility=susceptibility, curve_number=cn, basis=basis,
-        classes=pm.classes, tan_slope=tan_slope.astype(np.float32),
-        cell_area_m2=abs(transform.a * transform.e), cell_width_m=px_w,
-        transform=transform, crs=crs, bounds=bounds, shape=shape,
+        susceptibility=susceptibility,
+        curve_number=cn,
+        basis=basis,
+        classes=pm.classes,
+        tan_slope=tan_slope.astype(np.float32),
+        cell_area_m2=abs(transform.a * transform.e),
+        cell_width_m=px_w,
+        transform=transform,
+        crs=crs,
+        bounds=bounds,
+        shape=shape,
     )
 
     # Fix the pluvial 0-1 scale against the reference storm so the index is
@@ -168,7 +184,8 @@ def build(max_dim: int = 1000, aligned_dir: Optional[Path] = None) -> LiveGrid:
     grid.pluvial_hi = float(np.percentile(finite, 99.5))
     LOGGER.info(
         "  pluvial scale anchored at the reference storm: [%.2f, %.2f]",
-        grid.pluvial_lo, grid.pluvial_hi,
+        grid.pluvial_lo,
+        grid.pluvial_hi,
     )
     return grid
 
@@ -199,12 +216,9 @@ def save(grid: LiveGrid, model_dir: Optional[Path] = None) -> Path:
         "shape": list(grid.shape),
         "crs": str(grid.crs),
         "transform": [t.a, t.b, t.c, t.d, t.e, t.f],
-        "bounds": [grid.bounds.left, grid.bounds.bottom,
-                   grid.bounds.right, grid.bounds.top],
+        "bounds": [grid.bounds.left, grid.bounds.bottom, grid.bounds.right, grid.bounds.top],
     }
-    arrays["header_json"] = np.frombuffer(
-        json.dumps(header).encode("utf-8"), dtype=np.uint8
-    )
+    arrays["header_json"] = np.frombuffer(json.dumps(header).encode("utf-8"), dtype=np.uint8)
 
     np.savez_compressed(path, **arrays)
     LOGGER.info("Cached live model -> %s (%.1f MB)", path, path.stat().st_size / 1e6)
@@ -220,9 +234,7 @@ def load(model_dir: Optional[Path] = None) -> LiveGrid:
     model_dir = model_dir or MODELS_DIR
     path = model_dir / CACHE_NAME
     if not path.exists():
-        raise FileNotFoundError(
-            f"{path} not found. Run `python src/live_model.py --build`."
-        )
+        raise FileNotFoundError(f"{path} not found. Run `python src/live_model.py --build`.")
 
     with np.load(path, allow_pickle=False) as z:
         header = json.loads(bytes(z["header_json"]).decode("utf-8"))
@@ -263,8 +275,12 @@ def fluvial_probability(grid: LiveGrid, rainfall_mm: float) -> np.ndarray:
     from pluvial import routed_runoff_ratio
 
     ratio = routed_runoff_ratio(
-        grid.basis, grid.classes, float(rainfall_mm), RAINFALL.reference_event_mm,
-        grid.cell_area_m2, np.isfinite(grid.susceptibility),
+        grid.basis,
+        grid.classes,
+        float(rainfall_mm),
+        RAINFALL.reference_event_mm,
+        grid.cell_area_m2,
+        np.isfinite(grid.susceptibility),
     )
     return combine(grid.susceptibility, grid.curve_number, float(rainfall_mm), runoff_ratio=ratio)
 
@@ -338,7 +354,10 @@ def query(grid: LiveGrid, lat: float, lon: float, rainfall_mm: float) -> Optiona
             break
 
     return {
-        "lat": lat, "lon": lon, "row": row, "col": col,
+        "lat": lat,
+        "lon": lon,
+        "row": row,
+        "col": col,
         "rainfall_mm": float(rainfall_mm),
         "land_cover": cover,
         "curve_number": cn,
@@ -381,7 +400,10 @@ def main() -> None:  # pragma: no cover
             dt = (time.perf_counter() - t0) * 1000
             LOGGER.info(
                 "%4d mm -> %5.1f ms | fluvial mean %.4f | pluvial mean %.3f",
-                mm, dt, np.nanmean(f), np.nanmean(p),
+                mm,
+                dt,
+                np.nanmean(f),
+                np.nanmean(p),
             )
 
 

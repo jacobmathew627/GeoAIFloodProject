@@ -5,6 +5,7 @@ Offline only: building rasters needs the 42 MB download and the aligned grid.
 What matters here is that the event table stays coherent, because it is what
 lets the rainfall sensitivity be fitted across events.
 """
+
 import pytest
 
 from ndem_labels import EVENTS, PRIMARY_EVENT
