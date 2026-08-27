@@ -449,10 +449,14 @@ def fig_importance(metrics: Dict) -> None:
         LOGGER.warning("no permutation importance -- skipping fig7")
         return
 
-    context = {"upstream_cn", "dem_rel_1km"}
+    # Neighbourhood aggregates: each summarises an area around the pixel rather
+    # than the pixel itself. Distances (river_dist, osm_drain_dist, urban_dist)
+    # are deliberately not in this set -- they are pixel-to-nearest-feature
+    # measurements, a different kind of quantity.
+    context = {"upstream_cn", "dem_rel_1km", "osm_drain_density"}
     order = sorted(imp, key=lambda k: imp[k])
     values = [imp[k] for k in order]
-    # One series, one colour; emphasis marks the two context features rather
+    # One series, one colour; emphasis marks the neighbourhood features rather
     # than ramping colour by magnitude (which the bar length already shows).
     colors = [SERIES[1] if k in context else SERIES[0] for k in order]
 
@@ -462,7 +466,7 @@ def fig_importance(metrics: Dict) -> None:
     ax.set_yticklabels(order)
     ax.set_xlabel("AUC drop when the feature is shuffled")
     ax.set_title(
-        "Drainage-network context earns its place\n"
+        "Neighbourhood context earns its place\n"
         "Orange: features describing surroundings rather than the pixel itself",
         loc="left",
     )

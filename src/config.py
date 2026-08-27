@@ -201,10 +201,38 @@ class HydrologyConfig:
     amc: str = "III"  # "I" (dry), "II" (average), "III" (wet)
 
     # Sensitivity of flood odds to runoff, in logit units per natural-log unit
-    # of the runoff ratio Q(P) / Q(P_reference). beta = 1.8 means halving the
-    # runoff depth relative to the reference storm multiplies the flood odds
-    # by exp(-1.8 * ln 2) = 0.29. See hazard.combine.
-    runoff_logit_beta: float = 1.8
+    # of the runoff ratio Q(P) / Q(P_reference). beta = 2.8 means halving the
+    # runoff depth relative to the reference storm multiplies the flood odds by
+    # exp(-2.8 * ln 2) = 0.14. See hazard.combine.
+    #
+    # FITTED, not assumed -- `python src/fit_beta.py`. The previous 1.8 was a
+    # guess, and it was the last hand-picked constant in the hazard model. It
+    # was also the one that decides how hard the rainfall slider bites, so its
+    # being a guess meant the slider's *shape* was unvalidated even though its
+    # endpoints were pinned to observation.
+    #
+    # Anchored on the 2021 event (173.7 mm), which is the only one with real
+    # leverage: expected area at the reference depth is fixed by the prior
+    # calibration, so P_ref carries no information about beta at all, and 2019
+    # at 412.5 mm sits too close to the 443 mm reference to constrain it. At
+    # beta = 2.815 the 2021 event predicts 3.9 km2 against 4.1 km2 observed.
+    # Fitting on 2021 alone gives 2.769, so the two agree and 2.8 is the value.
+    #
+    # The 2019 event is deliberately discounted, and the reason is worth
+    # keeping: it fell 412.5 mm -- 7% below the reference -- yet its NDEM extent
+    # is 31.3 km2 against the reference event's 78.7 km2. No response that is
+    # monotonic in rainfall can drop 60% of its extent over a 7% fall in depth.
+    # Its label footprint also stops at column 4639 where 2018 reaches 6116, so
+    # it never covers the eastern district. That is satellite coverage and
+    # acquisition timing, not hydrology.
+    #
+    # Honest uncertainty: with only two informative events the leave-one-out
+    # spread runs 2.769 to 8.000, the upper fold hitting the search bound.
+    # beta is therefore *anchored* rather than *identified*. It is a better
+    # number than 1.8 because it is tied to an observed extent instead of to
+    # nothing, but a third well-covered event at a genuinely different depth is
+    # what would pin it down. Re-run fit_beta.py when one exists.
+    runoff_logit_beta: float = 2.8
 
 @dataclass(frozen=True)
 class RiskThresholds:

@@ -211,11 +211,13 @@ if data is not None and meta is not None:
         image_rgba, legend_items = create_pluvial_visualization(data)
         title = f"Waterlogging pressure at {rainfall:.0f} mm"
         alert_placeholder.warning(
-            "**Unvalidated layer.** Physics only: routed SCS-CN runoff over "
-            "local gradient. There are no urban waterlogging records for this "
-            "district, so this index has never been tested against the "
-            "phenomenon it names. Use it to rank locations, not as a probability. "
-            "The calibrated layer is *Flood Probability (live)*."
+            "**Proxy-validated, not calibrated.** Routed SCS-CN runoff over "
+            "local gradient. Tested against 14 documented waterlogging "
+            "hotspots vs. an elevation-matched urban background: AUC 0.807 "
+            "(95% CI 0.698-0.908) -- real skill, but the control is a proxy, "
+            "not actual incident records, since none exist for this district "
+            "yet. Use it to rank locations, not as a probability. The "
+            "calibrated layer is *Flood Probability (live)*."
         )
     elif layer_type == "Conformal Confidence":
         image_rgba, legend_items = create_conformal_visualization(data)

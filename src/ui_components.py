@@ -354,7 +354,12 @@ def render_live_analytics(
                 b.metric(
                     "Waterlogging index",
                     f"{result['pluvial_index']:.2f}",
-                    help="Unvalidated physics index, 0-1 relative ranking.",
+                    help=(
+                        "Physics index, 0-1 relative ranking. Proxy-validated: "
+                        "AUC 0.807 vs an elevation-matched urban background at "
+                        "14 documented hotspots -- not yet against real "
+                        "incident records."
+                    ),
                 )
                 st.caption(
                     f"At {result['rainfall_mm']:.0f} mm on curve number "

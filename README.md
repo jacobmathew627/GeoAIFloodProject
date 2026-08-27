@@ -39,13 +39,14 @@ four distinct images, and the reported expected flooded area moves 1 → 4 → 1
 
 | Layer | What it is | Trust |
 |---|---|---|
-| **Flood Probability (live)** | Probability of riverine/backwater inundation | Calibrated. Spatial-block AUC 0.919, conformal coverage guarantee. |
-| **Waterlogging Index (live)** | Rain-driven waterlogging pressure, 0–1 | **Unvalidated.** Physics only. |
+| **Flood Probability (live)** | Probability of riverine/backwater inundation | Calibrated. Spatial-block AUC 0.824, conformal coverage guarantee. |
+| **Waterlogging Index (live)** | Rain-driven waterlogging pressure, 0–1 | **Proxy-validated.** AUC 0.807 (95% CI 0.698–0.908) against 14 documented hotspots vs. an elevation-matched urban background — not yet against real incident records. |
 
-They answer different questions and only one is calibrated. Averaging them
-would launder the unvalidated one into the other's credibility, so the app
-keeps them as separate layers with separate colour ramps, and the waterlogging
-layer carries a warning banner.
+They answer different questions and neither is validated against the thing it
+would ultimately need to be: real waterlogging incident records. Averaging
+them would launder the weaker validation into the stronger one's credibility,
+so the app keeps them as separate layers with separate colour ramps, and the
+waterlogging layer carries a warning banner explaining the proxy control.
 
 The point query returns both, alongside the physical quantities behind them —
 land cover, curve number, runoff depth and runoff coefficient — so a number can
@@ -185,46 +186,58 @@ audited or dropped.
 
 ## Read this first: what the model does and does not predict
 
-**It does not predict urban waterlogging.** It predicts the extent of
-riverine and backwater inundation. Those are different phenomena, and the
-distinction is not cosmetic — it decides what the output can be used for.
+**The *fluvial* layer does not predict urban waterlogging.** It predicts the
+extent of riverine and backwater inundation. Those are different phenomena,
+and the distinction is not cosmetic — it decides what the output can be used
+for. (A separate *pluvial* layer, covered below, is built specifically for
+street-level ponding and does show real skill at it.)
 
-The evidence, from the shipped rasters:
+The evidence, from the current rasters (NDEM-trained, `osm_drain_dist` and
+`osm_drain_density` included as inputs, hazard at the 443 mm reference event):
 
 | | Top 0.1% of predicted hazard | Whole district |
 |---|---|---|
-| Median elevation | **0.0 m** | 29.4 m |
+| Median elevation | **7.9 m** | 29.4 m |
 | Median urban fraction | **0.0** | **1.0** |
-| Median distance to drainage | 3,146 m | 1,083 m |
+| Median distance to drainage | 912 m | 1,083 m |
 
 The district is majority built-up, yet the model's highest-hazard zone is
-almost entirely *not* built-up: sea-level paddy and wetland fringing the
-Vembanad backwaters. Sampled at named places, at the reference event:
+still almost entirely *not* built-up: low-lying paddy and wetland fringing the
+Vembanad backwaters, now somewhat closer to a mapped drainage channel than the
+district median rather than farther from it. Sampled at named places, at the
+reference event:
 
-| Place | Hazard @332 mm | Band |
+| Place | Hazard @443 mm | Band |
 |---|---|---|
-| Aluva (on the Periyar) | 0.029 | moderate |
-| Perumbavoor | 0.007 | safe |
+| Perumbavoor | 0.065 | high |
+| Aluva (on the Periyar) | 0.008 | safe |
+| Kaloor | 0.005 | safe |
 | Vyttila | 0.003 | safe |
-| Kaloor | 0.002 | safe |
-| Ernakulam / MG Road | 0.001 | safe |
-| Edappally | 0.0005 | safe |
+| Edappally | 0.003 | safe |
+| Ernakulam / MG Road | 0.002 | safe |
 
-Kochi's urban core reads as essentially zero risk. That is not a bug — it is
-what the training label contains. The inventory is Sentinel-1 open water at a
-single overpass during an event driven by Periyar flooding and reservoir
-releases. Street-level waterlogging is largely invisible to C-band SAR (tree
-canopy, buildings, and it often drains before the satellite passes), and it is
-governed by storm-drain capacity, canal blockage and tidal locking of
-outfalls — none of which are inputs to this model.
+Kochi's urban core still reads as low fluvial risk. That is not a bug — it is
+what the training label contains. NDEM's 2018 inundation footprint is
+inland-and-lowland, not the city centre (see "Why this is lower than the
+earlier 0.919" below), so the fluvial model correctly learns that this
+particular kind of flooding — river and backwater inundation — favours
+low-lying non-urban land. Drainage proximity *is* now an input to this
+model (`osm_drain_dist` ranks 5th of 16 features, `osm_drain_density` 6th),
+but it does not flip the urban core to high risk here: at the 14 documented
+waterlogging hotspots the fluvial layer still scores near chance, AUC 0.388
+(95% CI 0.269–0.527) against an elevation-matched background. Street-level
+ponding is a different mechanism — governed by storm-drain capacity, canal
+backup on the tide, and blockage — and that mechanism is what the pluvial
+layer targets instead.
 
-**What the output is legitimately good for:** ranking the low-lying rural and
-peri-urban floodplain by relative inundation susceptibility, with calibrated
-probabilities and a coverage guarantee.
+**What the fluvial output is legitimately good for:** ranking the low-lying
+rural and peri-urban floodplain by relative inundation susceptibility, with
+calibrated probabilities and a coverage guarantee.
 
-**What it is not good for:** answering "will this street flood if 120 mm falls
-tomorrow". See [Known limitations](#known-limitations) for the full list and
-[What would close the gap](#what-would-close-the-gap) for what it would take.
+**What it is not good for on its own:** answering "will this street flood if
+120 mm falls tomorrow" — use the pluvial index for that question instead. See
+[Known limitations](#known-limitations) for the full list and
+[What would close the gap](#what-would-close-the-gap) for what remains.
 
 ## Overview
 
@@ -282,6 +295,13 @@ is the better model. Calibration improved too: the worst predicted-versus-
 observed gap fell from 0.033 to **0.020**, and expected flooded area at the
 reference event matches the observed extent exactly (78.7 km²).
 
+The table above is a snapshot of that one ablation. The model has since grown
+to 16 features — `osm_drain_dist` and `osm_drain_density` added, `urban_mask`
+dropped as dead weight — and the NDEM spatial-block AUC held at **0.8240** to
+four decimals through both changes, so none of this section's conclusions
+change. Current permutation importance for the full feature set is in
+`models/susceptibility_metrics.json` and `evaluation/fig7_feature_importance.png`.
+
 Random k-fold **overstates AUC by 6.0 points** here. Neighbouring pixels of a
 10 m raster are near-duplicates, so a random split leaks the test set into
 training. The spatial-block number is the one to quote. The low-lying row is
@@ -294,31 +314,33 @@ faces.
 Probabilities are isotonic-calibrated out-of-fold. The isotonic curve is fitted
 on one half of the out-of-fold predictions and measured on the other, so the
 reliability figure is not circular; the worst predicted-vs-observed deviation
-across ten probability bins is **0.033**.
+across ten probability bins is **0.0309** (`models/susceptibility_metrics.json`
+→ `worst_calibration_gap_balanced_scale`).
 
-Training is deliberately balanced 1:1, but only **1.40%** of the model domain
-(312,781 of 22.3M pixels, i.e. **31.3 km²** of **2,230 km²**) actually flooded
-in 2018. Probabilities are therefore shifted back to the population base rate.
-The closed-form case-control offset (−4.231) assumes randomly drawn absences,
-which ours are not — they are elevation-stratified. The offset is instead
-**solved by bisection** against a uniform 400k-pixel sample of the district so
-that the expected flooded area equals the observed extent:
+Training is deliberately balanced 1:1, but only **3.53%** of the sampling
+domain (786,504 of 22.3M pixels) is NDEM-flooded in 2018. Probabilities are
+therefore shifted back to the population base rate. The closed-form
+case-control offset assumes randomly drawn absences, which ours are not — they
+are elevation-stratified. The offset is instead **solved by bisection** against
+a uniform 400k-pixel sample of the district so that the expected flooded area
+equals the observed extent:
 
-| | Expected flooded area at 400 mm | vs observed |
+| | Prior logit offset | Expected flooded area at 443 mm |
 |---|---|---|
-| No correction | 337 km² | 10.8× too high |
-| Closed-form offset (−4.231) | 20 km² | 0.65× too low |
-| **Fitted offset (−3.730)** | **30 km²** | **0.99×** |
+| Closed-form (assumes random absences) | −3.3175 | — |
+| **Fitted by bisection** | **−3.3779** | **78.65 km²** (target: 78.65 km²) |
 
-Measured on the written rasters: over the 21.14M-pixel model domain
-(2,114 km²) the 2018 inventory holds 297,069 flooded pixels (30 km²) and the
-400 mm hazard raster sums to 295,052 expected flooded pixels — a ratio of
-**0.993**. Against that same inventory the hazard surface scores AUC-ROC 0.977
-and AUC-PR 0.429, versus a 0.014 no-skill baseline at this prevalence.
+That match is exact by construction — bisection is solving for the offset that
+produces it — so it confirms the fit converged, not that the model is right.
+The independent check is against the *written raster*, pixel by pixel, over the
+2,114.5 km² intersection of the model domain and valid 2018 label: the
+hazard-at-443mm raster sums to 74.56 km² of expected flooding against 77.5 km²
+actually flooded (ratio **0.962**), and scores **AUC-ROC 0.887, AUC-PR 0.254**
+against a 0.037 no-skill baseline at this prevalence.
 
 ### Monotonicity
 
-Every pixel is verified non-decreasing across all seven scenarios:
+Every pixel is verified non-decreasing across all nine current scenarios:
 
 | Transition | Pixels where hazard decreases |
 |---|---|
@@ -328,6 +350,8 @@ Every pixel is verified non-decreasing across all seven scenarios:
 | 200 → 250 mm | 0 |
 | 250 → 300 mm | 0 |
 | 300 → 400 mm | 0 |
+| 400 → 443 mm | 0 |
+| 443 → 500 mm | 0 |
 
 The maps this replaces were not monotonic: the shipped 100 mm map had mean
 probability 0.124 against the 150 mm map's 0.025.
@@ -337,25 +361,29 @@ probability 0.124 against the 150 mm map's 0.025.
 The band edges are read off the precision-recall curve of the reference-event
 hazard map against the 2018 inventory, not chosen as round numbers:
 
-| Band | Lower edge | Captures of observed flooding | Precision | Area at 400 mm |
+| Band | Lower edge | Captures of observed flooding | Precision | Cumulative area at 443 mm |
 |---|---|---|---|---|
-| Moderate | 0.022 | 95.1% | 0.13 | 221 km² |
-| High | 0.070 | 80.6% | 0.22 | 110 km² |
-| Severe | 0.133 | 53.7% (max F1) | 0.33 | 49 km² |
-| Critical | 0.271 | 24.5% | 0.53 | 14 km² |
+| Moderate | 0.023 | 95.1% | 0.071 | 941.5 km² |
+| High | 0.050 | 80.1% | 0.121 | 466.5 km² |
+| Severe | 0.134 | 36.3% (max F1) | 0.256 | 90.1 km² |
+| Critical | 0.297 | 4.2% | 0.508 | 5.2 km² |
 
-District base rate is 1.4%, so the critical band runs ~38× the no-skill rate.
-The previous thresholds (0.10 / 0.20 / 0.30 / 0.50) came from the uncalibrated
-score; carried onto the corrected scale they classified the actual 2018
-catastrophe as "monitoring active". **Re-derive these whenever the model is
-retrained** — they are properties of the fitted probabilities, not constants.
+Area is cumulative — "≥ critical" rather than the critical slice alone. District
+base rate is 3.66% (NDEM, 443 mm), so the critical band runs ~14× the no-skill
+rate. The previous thresholds, against the Sentinel-1 inventory (base rate
+1.4%), were 0.022 / 0.070 / 0.133 / 0.271; before that, an uncalibrated score's
+0.10 / 0.20 / 0.30 / 0.50 classified the actual 2018 catastrophe as "monitoring
+active". **Re-derive these whenever the model is retrained**
+(`python src/risk_thresholds.py`) — they are properties of the fitted
+probabilities, not constants. As of the current model they re-derive to exactly
+the values already in `RiskThresholds`, so no change was needed this round.
 
-The resulting alert ladder: MONITORING to 250 mm, WARNING at 300–350 mm,
-CRITICAL at 400 mm (the reference event).
-
-Permutation importance (AUC drop when shuffled): elevation 0.097, distance to
-built-up 0.073, slope 0.067, **`dem_rel_1km` 0.060**, curve number 0.040,
-distance to drainage 0.038, NDWI 0.030, HAND 0.025, **`upstream_cn` 0.021**.
+Permutation importance (AUC drop when shuffled), current 16-feature model:
+elevation (`dem`) 0.1357, **`dem_rel_1km` 0.0983**, **`upstream_cn` 0.0700**,
+distance to river 0.0504, **`osm_drain_dist` 0.0466**,
+**`osm_drain_density` 0.0409**, slope 0.0164, distance to built-up 0.0161,
+flow accumulation 0.0158, curve number 0.0145, HAND 0.0136, TWI 0.0105. Full
+list in `models/susceptibility_metrics.json`.
 `urban_mask` scores 0.000 — fully redundant with `urban_dist` and
 `curve_number`, and should be dropped at the next retrain.
 
@@ -605,122 +633,155 @@ what identifies it as built-up.
 These are modelling choices, not measurements. Each is a single constant in
 `src/config.py`.
 
-- **Reference event = 332 mm** (`RAINFALL.reference_event_mm`) — now *derived*,
-  not assumed. ERA5 reanalysis on a 3×3 grid over the mapped district
-  ([src/reference_rainfall.py](src/reference_rainfall.py)) gives, for August
-  2018: max 1-day 157.9 mm (15 Aug), 2-day 255.9, **3-day 331.6 (14–16 Aug)**,
-  5-day 420.1, month 786.8. The 3-day window is chosen because `HYDRO.amc` is
-  III, which already encodes a wet antecedent 5 days — using a 5-day storm
-  total would count antecedent wetness twice.
+- **Reference event = 443.2 mm** (`RAINFALL.reference_event_mm`) — *derived*,
+  not assumed, and re-derived twice. First from ERA5 reanalysis (3-day max
+  331.6 mm, 14–16 Aug 2018), then superseded by IMD 0.25° gauge-based gridded
+  rainfall over the district bbox
+  ([src/reference_rainfall.py](src/reference_rainfall.py) `--source imd`):
+  max 1-day 191.1 mm (16 Aug), 2-day 334.9, **3-day 443.2 (15–17 Aug)**, 5-day
+  526.3, month 919.9. IMD runs 1.34× ERA5 here, consistent with ERA5
+  under-resolving monsoon extremes. The 3-day window is kept because
+  `HYDRO.amc` is III, which already encodes a wet antecedent 5 days — a 5-day
+  storm total would count antecedent wetness twice.
 
-  The previous value, 400 mm, was a guess that happened to land near the 5-day
-  total. Correcting it does not disturb the calibration (hazard equals
-  susceptibility at the reference depth, whatever that depth is) but it makes
-  every other scenario more severe, because the 2018 extent is now attributed
-  to a smaller storm: a 400 mm scenario went from 30 km² to 40 km² of expected
-  flooding, and 150 mm from 6 km² to 8 km². The system was previously
-  understating hazard at every rainfall depth.
-
-  Caveat: ERA5 under-resolves orographic extremes, and no rainfall product
-  captures the Periyar reservoir releases that contributed to the 2018
-  inundation. Treat it as a proxy for total forcing, not a measured storm.
-- **Hydrologic soil group C** for the whole district. Kerala's uplands are
-  laterite (HSG C) and the coastal strip is alluvium (HSG B); C is the
-  conservative single-group choice. A real HSG raster would improve this.
+  Caveat: IMD's 0.25° grid still under-resolves any sub-grid orographic
+  extreme, and no rainfall product captures the Periyar reservoir releases
+  that contributed to the 2018 inundation. Treat it as a proxy for total
+  forcing, not a measured storm.
+- **Soil hydrologic group.** `src/soil_hsg.py` exists, is tested, and reads
+  real SoilGrids texture — but it is **not wired into the model**. Measured
+  entropy across the district is 0.12 bits out of a possible 2.0 (98.5% of the
+  domain classifies to group D from a median clay-loam texture at 250 m
+  resolution), so adopting it acts almost like a uniform curve-number bump
+  (+2.16 median, roughly +12.7% runoff at 100 mm) rather than real spatial
+  heterogeneity, and it would require re-running the prior offset, the risk
+  thresholds and `beta` to stay calibrated. `HydrologyConfig.curve_numbers`
+  still uses the single group-C table it always did. See the module docstring
+  for the full finding before wiring it in.
 - **AMC III (wet)** antecedent moisture, appropriate for a monsoon-season
   flood-forecasting product.
 - **Initial abstraction ratio 0.05** rather than the classic 0.20, following
   Woodward et al. (2003), with the retention rescaled accordingly.
-- **beta = 1.8** logit units per log-unit of runoff ratio — the sensitivity of
-  flood odds to rainfall. Not fitted against multi-event data, because only
-  one flood inventory is available.
+- **beta = 2.8** logit units per log-unit of runoff ratio — the sensitivity of
+  flood odds to rainfall. Now *fitted* (`python src/fit_beta.py`) against the
+  NDEM 2019 and 2021 extents rather than assumed, but anchored more than
+  identified: the 2021 event (173.7 mm → 4.1 km²) carries essentially all the
+  leverage, 2019 is discounted for acquisition-timing reasons (see
+  [Known limitations](#known-limitations)), and the leave-one-out spread runs
+  2.77 to 8.00 — the upper end hits the search bound. A third well-covered
+  event at a different depth would pin this down; until then, treat 2.8 as
+  the honest current best guess rather than a converged estimate.
 - **Population and damage figures** in the alert panel are district-average
   density and a flat per-km² damage rate. They are labelled "planning
   estimate" in the UI and are not model outputs.
 
 ## Known limitations
 
-- **One flood event.** Susceptibility is calibrated on August 2018 alone. A
-  second inventory (2019 or 2021) would allow `beta` to be fitted rather than
-  assumed, and would give a genuine out-of-event validation. As it stands the
-  prior offset is fitted to reproduce the same event the model was trained on,
-  so "expected area equals observed area" is a consistency check, not
-  independent validation.
-- **`urban_mask` contributes nothing** (permutation importance 0.000). It is
-  redundant with `urban_dist` and `curve_number`. Deliberately *not* removed
-  yet: dropping a feature forces a retrain, which forces the risk thresholds to
-  be re-derived (they are properties of the fitted probabilities, not
-  constants), which forces the full-grid prediction, hazard and conformal
-  rasters to be regenerated. That is ~45 minutes of compute for no measurable
-  change in skill, and it would leave figures built from two different feature
-  sets. Fold it into the next retrain, which a second flood inventory will
-  require anyway.
-- **Presence-only inventory.** SAR observes water, not "dry". Absences are
-  pseudo-absences: buffered 5 px away from observed flooding and stratified
-  across elevation deciles matched to the presence distribution. This is the
-  main source of irreducible label noise.
+- **Susceptibility is trained on 2018 alone; `beta` leans on 2021 alone.**
+  Training uses `ndem_flood_2018` exclusively — the prior offset is fitted to
+  reproduce the same event the model was trained on, so "expected area equals
+  observed area" is a consistency check, not independent validation. NDEM does
+  supply three more events (2019: 31.3 km² at 412.5 mm; 2020: 11.1 km², IMD
+  rainfall not yet derived; 2021: 4.1 km² at 173.7 mm), and those went into
+  fitting `beta` — but 2019 is discounted (7% less rainfall than 2018, yet 60%
+  less extent, and its label footprint stops 1,477 columns short of 2018's,
+  which is acquisition coverage, not hydrology), which leaves 2021 doing
+  essentially all the work. A genuinely independent, well-covered multi-event
+  validation is still open.
+- **Presence-only inventory.** NDEM/SAR-derived inundation observes water, not
+  "dry". Absences are pseudo-absences: buffered 5 px away from observed
+  flooding and stratified across elevation deciles matched to the presence
+  distribution. This is the main source of irreducible label noise.
 - **Permanent water is excluded from the model domain.** It accounted for
-  80.3% of the raw flood inventory; including it trains a lake detector.
+  80.3% of the raw Sentinel-1 flood inventory that preceded the NDEM switch;
+  including it trains a lake detector.
 - **The archived `.pth` checkpoints are stale.** They were trained against
   feature rasters whose nodata sentinels had been clipped into the valid
   range. `src/inference_final.py` still loads them for reproducibility, but
   their output should not be used.
-- **No hydrodynamic routing.** Runoff is generated per-pixel and not routed
-  downslope, so the model gives flood *susceptibility*, not inundation depth.
-- **The inventory understates the event.** Sentinel-1 caught 30 km² of
-  non-permanent-water flooding across Ernakulam, which is small for an event
-  that displaced people district-wide — SAR sees open water at one overpass,
-  not peak inundation, and it cannot see under vegetation or inside built-up
-  areas. Every absolute area and exposure figure the system reports inherits
-  that floor, which is why the population and damage numbers in the alert
-  panel are labelled planning estimates rather than predictions.
+- **No local hydrodynamic routing.** `combine()` still applies SCS-CN
+  pointwise — a pixel's forcing is the rain that fell on it, not what its
+  catchment delivers — so the model gives flood *susceptibility*, not
+  inundation depth. (Basin-scale upstream contributing area is now built
+  separately by `src/upstream_routing.py`; see below for whether it validated
+  and whether it is wired in.)
+- **The inventory understates the event.** NDEM's 2018 footprint is 78.7 km²
+  of non-permanent-water flooding across Ernakulam, small for an event that
+  displaced people district-wide — satellite-derived inundation catches open
+  water at one overpass, not peak extent, and cannot see under vegetation or
+  inside built-up areas. Every absolute area and exposure figure the system
+  reports inherits that floor, which is why the population and damage numbers
+  in the alert panel are labelled planning estimates rather than predictions.
+- **Soil is one group everywhere**, by design for now — see
+  [Assumptions worth auditing](#assumptions-worth-auditing). A real per-pixel
+  raster exists (`src/soil_hsg.py`) but carries too little spatial information
+  at 250 m to be worth the recalibration cost of adopting it as measured.
 
 ## What would close the gap
 
 Ordered by how much each one moves the system toward actually answering
 "will this place waterlog at X mm", not by effort.
 
-1. **A waterlogging-specific label.** The single blocking issue. SAR open-water
-   extent is the wrong target. Municipal complaint logs, KSDMA incident
-   reports, traffic-police road-closure records or geolocated news reports
-   would give a few hundred points of the *right* phenomenon. Even a small
-   validation set would show whether the current surface has any skill at
-   street level — right now that is untested, and the place table above
-   suggests it does not.
-2. **More events, to fit `beta`.** The rainfall sensitivity
-   (`HYDRO.runoff_logit_beta = 1.8`) is currently *assumed*. The shape of the
-   response is physically constrained by SCS-CN, but its magnitude is a hand-set
-   constant, so every non-reference scenario is an extrapolation along a guessed
-   curve. Two more inventories turn it into a fitted parameter and give genuine
-   out-of-event validation. ERA5 says 2019 and 2021 were 197 mm and 117 mm
-   3-day events against 2018's 332 mm — usefully different magnitudes.
-   `src/acquire_flood_event.py` is ready once Earth Engine is authenticated.
-3. **Route the runoff in the hazard step.** `combine()` currently applies
-   SCS-CN *pointwise*: a pixel's forcing is the rain that fell on it, and none
-   of what its catchment delivers. The D8 network in `src/routing.py` already
-   exists and is only used for a static feature. Accumulating `Q(x, P)`
-   downslope would make the rainfall response genuinely spatial. This is the
-   cheapest real improvement on the list.
-4. **Spatially variable rainfall.** Scenarios apply one depth everywhere.
-   Accepting a rainfall raster (IMD gridded, or a forecast field) instead of a
-   scalar is a small interface change with a large realism gain.
-5. **Drainage infrastructure and tide.** Storm-drain capacity, canal network,
-   and outfall tide-locking are what actually determine urban waterlogging in a
-   coastal backwater city. Two pixels with identical terrain and one blocked
-   drain between them currently receive identical predictions.
+1. **A waterlogging-specific label.** Still the single blocking issue, and now
+   tested twice against 14 documented hotspots: Sentinel-1 open-water extent
+   scores 0/14, NDEM inundation scores 0/14 (fluvial AUC 0.388, chance).
+   Neither satellite product sees 20 cm of water between buildings. Municipal
+   complaint logs, KSDMA incident reports, traffic-police road-closure records
+   or geolocated news reports would give a few hundred points of the *right*
+   phenomenon and let the pluvial index (currently AUC 0.807 against an
+   elevation-matched proxy control, not against real waterlogging incidents)
+   be validated against the thing it actually claims to predict. A formal
+   request is drafted at
+   [docs/data-requests/ksdma-waterlogging-records.md](docs/data-requests/ksdma-waterlogging-records.md).
+2. ~~More events, to fit `beta`.~~ **Done, partially.** `python src/fit_beta.py`
+   fits the rainfall sensitivity against NDEM 2019 and 2021 instead of
+   assuming it (1.8 → **2.8**). But it is anchored more than identified — 2021
+   alone carries the leverage, and the leave-one-out spread runs 2.77 to
+   8.00 with the search bound hit on one fold. A third well-covered event at a
+   usefully different depth is what would actually close this one.
+3. **Route the runoff in the hazard step.** `combine()` still applies SCS-CN
+   *pointwise*: a pixel's forcing is the rain that fell on it, and none of
+   what its catchment delivers. The D8 network in `src/routing.py` exists and
+   is only used for a static feature; `src/upstream_routing.py` separately
+   built and validated a *basin-scale* contributing-area layer (Periyar,
+   Chalakudy, Muvattupuzha) but that is a different gap — bringing water in
+   from beyond the district boundary, not accumulating `Q(x, P)` downslope
+   within it. Neither is wired into `combine()` yet. Still the cheapest real
+   improvement on the list.
+4. **Spatially variable rainfall.** Scenarios apply one scalar depth
+   everywhere; `runoff_depth()` takes a single `rainfall_mm` float, not a
+   raster. Accepting a rainfall raster (IMD gridded, or a forecast field)
+   instead of a scalar is a small interface change with a large realism gain.
+5. **Drainage infrastructure and tide — partially done.** OSM drainage
+   (`src/osm_drainage.py`) is now in both models: it ranks 5th/6th of 16
+   features in the fluvial susceptibility model, and proximity-to-canal is the
+   strongest single signal in the pluvial index (AUC 0.713 alone). What is
+   still missing is capacity and state — pipe diameter, invert level,
+   blockage, and outfall tide-locking, none of which OSM records. Two pixels
+   with identical terrain and drainage geometry but one blocked outfall still
+   receive identical predictions.
 6. **Depth, not just probability.** Requires either hydrodynamic modelling or a
-   depth-labelled inventory. Furthest away, and only worth it after 1-3.
+   depth-labelled inventory. Furthest away, and only worth it after 1–3.
 
 ## Outstanding engineering
 
-- Three `outputs/flood_prob_*.tif` remain modified but uncommitted; they predate
-  this work and are superseded.
-- The old `fig1`–`fig6` PNGs and `paper_metrics.json` are left in place. Nothing
-  regenerates them; deleting them is a manuscript decision.
-- The archived `.pth` checkpoints were trained on the pre-fix corrupted rasters
-  and should not be used.
-- `urban_mask` (importance 0.000) is still in the feature list; fold its removal
-  into the next retrain.
+- Which artefacts are current versus superseded — including the three
+  `outputs/flood_prob_*.tif` that predate this work, the archived `.pth`
+  checkpoints, and the old `fig1`–`fig6` PNGs / `paper_metrics.json` — is
+  tracked in [docs/artefacts.md](docs/artefacts.md) rather than duplicated
+  here. Nothing regenerates the old figures automatically; deleting them is a
+  manuscript decision.
+- `urban_mask` (permutation importance 0.000, then −0.0000, then −0.0001 across
+  three retrains) has been dropped from `SUSCEPTIBILITY_FEATURES`. Confirmed
+  free: spatial-block AUC held at 0.8240 to four decimals with it removed.
+- Upstream basin-scale routing (`src/upstream_routing.py`, WhiteboxTools
+  breach-then-D8 over the 25,085 km² contributing area) is running as of this
+  writing; it refuses to write an aligned raster unless it validates against
+  published catchment areas at four gauging points, so either it passed and
+  `upstream_area_aligned.tif` exists, or it did not and there is no new
+  raster to accidentally trust. Check
+  `GeoAI_New/routing_work/routing_validation.json` for the outcome. Either
+  way it is not yet an input to `combine()` — see item 3 above.
 - The Streamlit app's data path, rendering and every static layer are
   smoke-tested, and the FastAPI routes are exercised end to end, but neither
   server has been run under a browser in this environment. The Docker build and

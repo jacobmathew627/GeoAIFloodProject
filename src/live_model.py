@@ -14,19 +14,27 @@ curve number. Everything rainfall-dependent is therefore a handful of scalar
 evaluations followed by array arithmetic on a ~1000x771 display grid.
 
 The two layers are deliberately NOT blended. They answer different questions,
-one is calibrated and one is not, and averaging them would launder the
-unvalidated one into the validated one's credibility:
+one is calibrated and one is a proxy-validated physics index, and averaging
+them would launder the weaker validation into the stronger one's credibility:
 
-  fluvial   Probability of riverine/backwater inundation. Trained on the 2018
-            Sentinel-1 inventory, calibrated, spatial-block AUC 0.919, with a
-            conformal coverage guarantee. Trust the number.
+  fluvial   Probability of riverine/backwater inundation. Trained on the NDEM
+            2018 inundation inventory, calibrated, spatial-block AUC 0.824,
+            with a conformal coverage guarantee. Trust the number. Includes
+            OSM drainage proximity/density as inputs (ranked 5th/6th of 16 by
+            permutation importance) but still scores near chance, AUC 0.388,
+            against the 14 documented urban waterlogging hotspots -- it is
+            answering a different question (basin-scale inundation) than the
+            one those hotspots pose (street-level ponding).
   pluvial   Relative index of rain-driven waterlogging pressure, from routed
-            runoff and local gradient. Physics only. There are no urban
-            waterlogging labels for this district, so it is UNVALIDATED and
-            scores AUC 0.53 against the 2018 inventory inside built-up areas
-            -- which is expected, since that inventory contains almost no
-            urban flooding, but means nothing here is demonstrated. Use it to
-            rank, never as a probability.
+            runoff and local gradient. Physics only, not probability-
+            calibrated -- but no longer untested: against the 14 documented
+            hotspots vs. an elevation-matched urban background it scores
+            AUC 0.807 (95% CI 0.698-0.908), and proximity to a mapped drain
+            or canal alone gets AUC 0.713 (canals in this city are tidal and
+            back up, so *closer* is worse, not better -- see
+            src/osm_drainage.py). The control is a proxy, not real incident
+            records, since none exist for this district yet. Use it to rank,
+            never as a probability.
 """
 from __future__ import annotations
 

@@ -23,24 +23,24 @@
       "Vyttila",
       "Palarivattom"
     ],
-    "hotspot_median": 0.0006539857713505626,
+    "hotspot_median": 0.0001622128620510921,
     "urban": {
       "n_background": 4000,
-      "background_median": 0.002301187254488468,
-      "auc": 0.2936785714285714,
+      "background_median": 0.0006640689680352807,
+      "auc": 0.3244285714285714,
       "auc_ci95": [
-        0.17444375,
-        0.44280624999999996
+        0.1970839285714286,
+        0.4773111607142857
       ],
       "beats_chance": false
     },
     "urban_elevation_matched": {
       "n_background": 4000,
-      "background_median": 0.0017940173856914043,
-      "auc": 0.35344642857142855,
+      "background_median": 0.0005490847397595644,
+      "auc": 0.38828571428571435,
       "auc_ci95": [
-        0.2344544642857143,
-        0.4991428571428571
+        0.26862366071428573,
+        0.5269191964285714
       ],
       "beats_chance": false
     }

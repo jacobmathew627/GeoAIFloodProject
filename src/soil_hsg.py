@@ -50,6 +50,41 @@ Output
 ------
     soil_hsg_aligned.tif   1 = A, 2 = B, 3 = C, 4 = D, on the master grid
 
+STATUS: built, tested, and deliberately NOT wired into the model
+------------------------------------------------------------------
+`curve_number_from_lulc` accepts an optional `hsg` argument, but nothing in
+feature_stack.py, hazard.py or live_model.py passes it. Measured on the actual
+build, the reason is that this raster does not deliver what its own docstring
+predicted:
+
+    HSG A:        0 px (  0.0%)
+    HSG B:   46,601 px (  0.2%)
+    HSG C:  240,925 px (  1.3%)
+    HSG D: 18,898,421 px ( 98.5%)
+    Shannon entropy: 0.12 bits (max 2.0 for four groups equally represented)
+
+The median district pixel (sand 39.0%, clay 31.3%) classifies as clay loam,
+group D, and 250 m SoilGrids resolution does not resolve enough texture
+variation across Ernakulam to move most of it out of that class. That may well
+be a correct reading of the district's soils rather than a modelling error --
+this is a deltaic, backwater-fed landscape, and pure sand is plausibly confined
+to a beach strip too narrow for a 250 m pixel -- but it means the raster is not
+supplying spatial heterogeneity. It is close to a uniform curve-number bump:
+switching every LULC class from the group-C column to the actual per-pixel
+column raises CN by a median +2.16 (mean +2.52), which raises runoff depth by
+roughly +12.7% at 100 mm and +3.6% at 443 mm district-wide.
+
+That is not a free improvement. The prior offset (fit_prior_offset), the risk
+band edges (risk_thresholds.py) and the rainfall sensitivity beta (fit_beta.py)
+are all calibrated against the current group-C-uniform curve numbers. Adopting
+this raster would shift expected flooded area at every rainfall depth and
+require re-running all three -- a decision that changes headline numbers project
+-wide, so it should be made explicitly rather than fall out of wiring one
+optional argument. Until then this module stays available and tested but
+inert: build it, inspect it, but do not pass its output to
+curve_number_from_lulc in the production pipeline without redoing the
+calibration chain.
+
 Run:  python src/soil_hsg.py --build
 """
 from __future__ import annotations
