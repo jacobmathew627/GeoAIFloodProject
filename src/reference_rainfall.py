@@ -46,10 +46,13 @@ ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 #: WGS84 footprint of the master grid.
 DISTRICT_BOX = {"lat": (9.79, 10.30), "lon": (76.17, 76.84)}
 
-#: Known Kerala flood events with Sentinel-1 era coverage.
+#: Known Kerala flood events with satellite-derived inundation coverage
+#: (Sentinel-1 for 2018, NDEM for 2018-2021). Month windows match the month
+#: containing each event's NDEM acquisition dates (src/ndem_labels.py EVENTS).
 EVENTS: Dict[str, Tuple[str, str]] = {
     "2018": ("2018-08-01", "2018-08-31"),
     "2019": ("2019-08-01", "2019-08-31"),
+    "2020": ("2020-08-01", "2020-08-31"),
     "2021": ("2021-10-01", "2021-10-31"),
 }
 
@@ -199,6 +202,29 @@ def analyse(event: str = "2018", n_grid: int = 3) -> Dict:
     return result
 
 
+def merge_results(existing: Dict, new: Dict) -> Dict:
+    """
+    Merge freshly computed event results into whatever is already on disk.
+
+    A single `--event 2020` run used to overwrite the whole
+    `reference_rainfall.json`, silently destroying the cached 2018/2019/2021
+    results that fit_beta.py and the README both read from -- discovered by
+    doing exactly that. `new` always wins for keys it contains (a rerun of an
+    event should update it), but keys `new` does not touch are preserved.
+    """
+    return {**existing, **new}
+
+
+def _load_existing(path) -> Dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        LOGGER.warning("could not read existing %s (%s); starting fresh", path, exc)
+        return {}
+
+
 def main() -> None:  # pragma: no cover
     parser = argparse.ArgumentParser(description="Derive the reference event depth")
     parser.add_argument("--event", default="2018", choices=sorted(EVENTS))
@@ -213,7 +239,9 @@ def main() -> None:  # pragma: no cover
     setup_logging(logging.INFO)
 
     events = sorted(EVENTS) if args.all else [args.event]
-    results = {}
+    out = MODELS_DIR / "reference_rainfall.json"
+    new_results = {}
+
     for event in events:
         if args.source == "imd":
             r = analyse_imd(event)
@@ -229,7 +257,7 @@ def main() -> None:  # pragma: no cover
                 LOGGER.warning("ERA5 cross-check unavailable: %s", exc)
         else:
             r = analyse(event, args.grid)
-        results[event] = r
+        new_results[event] = r
         LOGGER.info("=" * 62)
         LOGGER.info("%s  -- %s", event, r["source"])
         LOGGER.info("=" * 62)
@@ -254,9 +282,9 @@ def main() -> None:  # pragma: no cover
             STORM_WINDOW_DAYS, r["reference_event_mm"],
         )
 
-    out = MODELS_DIR / "reference_rainfall.json"
-    out.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    LOGGER.info("Wrote %s", out)
+    merged = merge_results(_load_existing(out), new_results)
+    out.write_text(json.dumps(merged, indent=2, sort_keys=True), encoding="utf-8")
+    LOGGER.info("Wrote %s (%d events on record)", out, len(merged))
 
 
 if __name__ == "__main__":  # pragma: no cover

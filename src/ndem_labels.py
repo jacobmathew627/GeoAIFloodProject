@@ -77,8 +77,8 @@ EVENTS: Dict[str, Dict] = {
     },
     "2020": {
         "dates": ["09-08-2020 00:00", "10-08-2020 00:00"],
-        "rainfall_mm": None,
-        "note": "rainfall not yet derived",
+        "rainfall_mm": 305.5,
+        "note": "IMD peak 7-9 Aug (src/reference_rainfall.py --event 2020)",
     },
     "2021": {
         "dates": ["16-10-2021 00:00", "19-10-2021 00:00"],

@@ -15,6 +15,7 @@ from reference_rainfall import (
     EVENTS,
     STORM_WINDOW_DAYS,
     max_accumulation,
+    merge_results,
     sample_grid,
 )
 
@@ -109,3 +110,42 @@ class TestConfigConsistency:
         """Sentinel-1A launched in 2014; anything earlier has no SAR inventory."""
         for event in EVENTS:
             assert int(event) >= 2014
+
+
+class TestMergeResults:
+    """
+    Regression coverage for a real bug: running the CLI for a single event
+    (`--event 2020`, no `--all`) used to overwrite the whole
+    models/reference_rainfall.json, destroying the cached 2018/2019/2021
+    results that fit_beta.py and the README both depend on. Found by doing
+    exactly that while deriving 2020's rainfall.
+    """
+
+    def test_new_event_is_added_without_losing_existing_ones(self):
+        existing = {"2018": {"reference_event_mm": 443.2}, "2019": {"reference_event_mm": 412.5}}
+        new = {"2020": {"reference_event_mm": 305.5}}
+        merged = merge_results(existing, new)
+        assert set(merged) == {"2018", "2019", "2020"}
+        assert merged["2018"] == existing["2018"]
+        assert merged["2019"] == existing["2019"]
+        assert merged["2020"] == new["2020"]
+
+    def test_rerunning_an_event_updates_it_in_place(self):
+        """A rerun of an existing event should overwrite that event only."""
+        existing = {"2018": {"reference_event_mm": 400.0}, "2021": {"reference_event_mm": 173.7}}
+        new = {"2018": {"reference_event_mm": 443.2}}
+        merged = merge_results(existing, new)
+        assert merged["2018"]["reference_event_mm"] == 443.2
+        assert merged["2021"] == existing["2021"]
+
+    def test_empty_existing_file_just_adopts_new_results(self):
+        assert merge_results({}, {"2018": {"reference_event_mm": 443.2}}) == {
+            "2018": {"reference_event_mm": 443.2}
+        }
+
+    def test_a_full_all_run_overwrites_everything_it_covers(self):
+        """`--all` computes every known event, so the merge should end up
+        identical to `new` whenever `new` already covers every key."""
+        existing = {"2018": {"reference_event_mm": 331.6}}  # stale ERA5-era value
+        new = {"2018": {"reference_event_mm": 443.2}, "2019": {"reference_event_mm": 412.5}}
+        assert merge_results(existing, new) == new
