@@ -113,7 +113,18 @@ def _fetch_model_forecast() -> Optional[float]:
     try:
         import rainfall_forecast
 
-        result = rainfall_forecast.predict_latest()
+        # A deployment need not ship the 874 MB IMD archive load_series() reads.
+        # Prefer a live computation; fall back to the cached snapshot rather
+        # than letting imdlib try to download six years of gridded rainfall
+        # while the user waits. The snapshot is not a staleness compromise --
+        # the prediction is anchored to the last fully-closed calendar year, so
+        # it does not change with wall-clock time either way.
+        try:
+            result = rainfall_forecast.predict_latest()
+        except Exception as exc:
+            LOGGER.info("Live forecast unavailable (%s); using the snapshot.", exc)
+            result = rainfall_forecast.load_snapshot()
+
         _, metadata = rainfall_forecast.load_model()
         skill = metadata["scores"]["mae_skill_vs_climatology"]
 
@@ -122,7 +133,9 @@ def _fetch_model_forecast() -> Optional[float]:
             f"**{result['predicted_total_mm']:.0f} mm**"
         )
         st.sidebar.caption(
-            f"As of {result['as_of']}. Trailing 3 days "
+            f"As of {result['as_of']}"
+            f"{' (cached snapshot)' if result.get('from_snapshot') else ''}. "
+            f"Trailing 3 days "
             f"{result['last_3_days_mm']:.0f} mm, 30 days "
             f"{result['last_30_days_mm']:.0f} mm. "
             f"Held-out MAE skill vs climatology {skill:+.0%}."

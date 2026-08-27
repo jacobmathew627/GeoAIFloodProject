@@ -80,13 +80,34 @@ def load_series(
     District-mean daily rainfall. Returns (dates as datetime64[D], mm).
 
     Downloads on first use and caches; subsequent calls read from disk.
+
+    That caching is done here, not left to imdlib: `imd.get_data()` has no
+    file-exists check of its own -- it re-POSTs to imdpune.gov.in for every
+    requested year on every single call, with no request timeout, so a
+    5-year window like predict_latest()'s default re-downloads 5 files from
+    a government server on every sidebar click. That is what made "Use
+    model rainfall forecast" hang or fail intermittently even though none of
+    those years' data had changed since the last successful call. Only
+    years actually missing from the cache are fetched; the rest are read
+    straight off disk via imd.open_data(), which never touches the network.
     """
     import imdlib as imd
 
     cache_dir = cache_dir or CACHE_DIR
     cache_dir.mkdir(parents=True, exist_ok=True)
+    rain_dir = cache_dir / "rain"
+    rain_dir.mkdir(parents=True, exist_ok=True)
 
-    data = imd.get_data("rain", start_year, end_year, fn_format="yearwise", file_dir=str(cache_dir))
+    missing_years = [
+        y for y in range(start_year, end_year + 1) if not (rain_dir / f"{y}.grd").exists()
+    ]
+    for year in missing_years:
+        LOGGER.info("IMD rainfall for %d not cached; fetching from imdpune.gov.in...", year)
+        imd.get_data("rain", year, year, fn_format="yearwise", file_dir=str(cache_dir))
+
+    data = imd.open_data(
+        "rain", start_year, end_year, fn_format="yearwise", file_dir=str(cache_dir)
+    )
     ds = data.get_xarray().sel(lat=slice(*LAT), lon=slice(*LON))
 
     values = ds["rain"].values.astype(float)
@@ -359,9 +380,19 @@ def load_model(model_dir: Optional[Path] = None):
 
 
 def predict_latest(
-    start_year: int = 2020, end_year: int = 2024, model_dir: Optional[Path] = None
+    start_year: int = 2020, end_year: int = 2025, model_dir: Optional[Path] = None
 ) -> Dict:
-    """Forecast the next 3-day total from the most recent available observations."""
+    """
+    Forecast the next 3-day total from the most recent available observations.
+
+    end_year stops at the last fully-closed calendar year, not the current
+    one: IMD's yearwise archive ships a fixed-size binary file per year, and
+    the current year's file is short (the year is not over yet), which
+    fails imdlib's fixed-shape parser rather than truncating gracefully.
+    "As of" will therefore always trail live conditions by however much of
+    the current year has passed -- an inherent limit of this free archive
+    format, not something to route around by guessing at a partial size.
+    """
     model, metadata = load_model(model_dir)
     dates, rain = load_series(start_year, end_year)
     X, _, stamps = build_features(dates, rain)
@@ -384,10 +415,53 @@ def predict_latest(
     }
 
 
+#: Cached copy of the most recent prediction, for deployments that do not ship
+#: the raw IMD archive.
+SNAPSHOT_NAME = "rainfall_forecast_latest.json"
+
+
+def write_snapshot(model_dir: Optional[Path] = None) -> Path:
+    """
+    Compute a prediction and cache it to JSON.
+
+    A container image has no reason to carry the 874 MB IMD archive that
+    load_series() reads: the prediction it produces is *already* a fixed
+    snapshot, because end_year stops at the last fully-closed calendar year
+    (see predict_latest). So the value does not change with wall-clock time
+    and caching it loses nothing. Without this, the first click on "Use model
+    rainfall forecast" in a deployed container would try to download six
+    years of gridded rainfall from imdpune.gov.in.
+    """
+    model_dir = model_dir or MODELS_DIR
+    result = predict_latest(model_dir=model_dir)
+    path = model_dir / SNAPSHOT_NAME
+    path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    LOGGER.info("Wrote forecast snapshot -> %s", path)
+    return path
+
+
+def load_snapshot(model_dir: Optional[Path] = None) -> Dict:
+    """Read the cached prediction. Raises FileNotFoundError if absent."""
+    model_dir = model_dir or MODELS_DIR
+    path = model_dir / SNAPSHOT_NAME
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found. Run `python src/rainfall_forecast.py --snapshot`."
+        )
+    result = json.loads(path.read_text(encoding="utf-8"))
+    result["from_snapshot"] = True
+    return result
+
+
 def main() -> None:  # pragma: no cover
     parser = argparse.ArgumentParser(description="Short-term rainfall prediction")
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--predict-latest", action="store_true")
+    parser.add_argument(
+        "--snapshot",
+        action="store_true",
+        help="Cache the latest prediction to JSON for deployment",
+    )
     parser.add_argument("--start-year", type=int, default=1990)
     parser.add_argument("--end-year", type=int, default=2024)
     parser.add_argument("--test-from", type=int, default=2015)
@@ -399,8 +473,10 @@ def main() -> None:  # pragma: no cover
     if args.predict_latest:
         for k, v in predict_latest().items():
             LOGGER.info("  %-22s %s", k, v)
-    if not args.train and not args.predict_latest:
-        parser.error("Specify --train and/or --predict-latest")
+    if args.snapshot:
+        write_snapshot()
+    if not any((args.train, args.predict_latest, args.snapshot)):
+        parser.error("Specify --train, --predict-latest and/or --snapshot")
 
 
 if __name__ == "__main__":  # pragma: no cover

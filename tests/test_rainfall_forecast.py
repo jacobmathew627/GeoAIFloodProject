@@ -7,6 +7,9 @@ time series shuffled or mis-indexed produces spectacular scores and no skill,
 the temporal twin of the spatial-autocorrelation problem in the flood model.
 """
 
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
 
@@ -16,6 +19,7 @@ from rainfall_forecast import (
     WARN_THRESHOLDS,
     build_features,
     climatology_baseline,
+    load_series,
     persistence_baseline,
 )
 
@@ -152,3 +156,85 @@ class TestConfiguration:
 
     def test_feature_names_unique(self):
         assert len(set(FEATURE_NAMES)) == len(FEATURE_NAMES)
+
+
+def _fake_open_data(n_days=10):
+    """A stand-in for imdlib's IMD object: .get_xarray().sel(...)["rain"/"time"].values."""
+    time_vals = (np.datetime64("2020-01-01", "D") + np.arange(n_days)).astype("datetime64[ns]")
+    rain_vals = np.full((n_days, 2, 2), 5.0)
+
+    class _FakeXr:
+        def sel(self, lat=None, lon=None):
+            return self
+
+        def __getitem__(self, key):
+            if key == "rain":
+                return SimpleNamespace(values=rain_vals)
+            if key == "time":
+                return SimpleNamespace(values=time_vals)
+            raise KeyError(key)
+
+    return SimpleNamespace(get_xarray=lambda: _FakeXr())
+
+
+class TestLoadSeriesCaching:
+    """
+    Regression tests for a real bug found during UAT: "Use model rainfall
+    forecast" hung or failed intermittently. Root cause: imdlib.get_data()
+    has no cache check of its own -- it re-POSTs to imdpune.gov.in for every
+    requested year on every call, with no request timeout, so a 5-year
+    default window re-downloaded 5 files from a government server on every
+    sidebar click. load_series() now checks the local cache itself and only
+    calls get_data() for years actually missing.
+    """
+
+    def test_skips_get_data_when_every_year_is_already_cached(self, tmp_path):
+        rain_dir = tmp_path / "rain"
+        rain_dir.mkdir(parents=True)
+        for year in (2020, 2021, 2022):
+            (rain_dir / f"{year}.grd").write_bytes(b"\x00")
+
+        fake_imdlib = MagicMock()
+        fake_imdlib.open_data.return_value = _fake_open_data()
+
+        with patch.dict("sys.modules", {"imdlib": fake_imdlib}):
+            load_series(2020, 2022, cache_dir=tmp_path)
+
+        fake_imdlib.get_data.assert_not_called()
+        fake_imdlib.open_data.assert_called_once()
+
+    def test_fetches_only_the_missing_years(self, tmp_path):
+        rain_dir = tmp_path / "rain"
+        rain_dir.mkdir(parents=True)
+        (rain_dir / "2020.grd").write_bytes(b"\x00")
+        # 2021 and 2022 are NOT cached.
+
+        fake_imdlib = MagicMock()
+        fake_imdlib.open_data.return_value = _fake_open_data()
+
+        with patch.dict("sys.modules", {"imdlib": fake_imdlib}):
+            load_series(2020, 2022, cache_dir=tmp_path)
+
+        fetched_years = sorted(call.args[1] for call in fake_imdlib.get_data.call_args_list)
+        assert fetched_years == [2021, 2022]
+
+    def test_reads_the_full_range_from_disk_after_fetching(self, tmp_path):
+        """
+        The final read must span the whole requested range via open_data(),
+        not just the years that were freshly fetched -- otherwise a mixed
+        cached/missing request would silently drop the cached years' data.
+        """
+        rain_dir = tmp_path / "rain"
+        rain_dir.mkdir(parents=True)
+        (rain_dir / "2020.grd").write_bytes(b"\x00")
+
+        fake_imdlib = MagicMock()
+        fake_imdlib.open_data.return_value = _fake_open_data()
+
+        with patch.dict("sys.modules", {"imdlib": fake_imdlib}):
+            load_series(2020, 2022, cache_dir=tmp_path)
+
+        _, kwargs = fake_imdlib.open_data.call_args
+        args = fake_imdlib.open_data.call_args.args
+        assert args[1] == 2020
+        assert args[2] == 2022

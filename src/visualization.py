@@ -372,7 +372,7 @@ _CMAP_SPEC = {
     "DEM": ("terrain", None),
     "Slope": ("magma", None),
     "TWI": ("YlGnBu", None),
-    "SPI": ("inferno", None),
+    "SPI": ("inferno", "signed_log"),
     "HAND": ("GnBu_r", (0.0, 20.0)),
     "TPI": ("RdBu_r", "symmetric"),
     "Distance to Water": ("Blues_r", (0.0, 3000.0)),
@@ -406,8 +406,36 @@ def create_static_visualization(
 
     if norm_spec == "log":
         values = np.log1p(np.clip(masked.filled(0.0), 0, None))
-        vmax = float(np.percentile(np.log1p(valid[valid > 0]), 99)) if np.any(valid > 0) else 1.0
-        norm = plt.Normalize(vmin=0.0, vmax=max(vmax, 1e-6))
+        # vmin used to be hardcoded 0, but a heavily right-skewed raw layer
+        # (flow accumulation: every cell starts near the district's basin
+        # -- min in the thousands, not 1) means log1p(vmin_real) sits well
+        # above 0. Stretching the colormap from an unreachable 0 compressed
+        # all the real variation into a sliver near the top, rendering as a
+        # near-flat wash instead of visible drainage structure. Anchor vmin
+        # to the data's own low percentile instead.
+        log_valid = np.log1p(valid[valid > 0]) if np.any(valid > 0) else np.array([0.0])
+        vmin = float(np.percentile(log_valid, 2))
+        vmax = float(np.percentile(log_valid, 99))
+        norm = plt.Normalize(vmin=vmin, vmax=max(vmax, vmin + 1e-6))
+    elif norm_spec == "signed_log":
+        # For layers whose raw magnitude spans many orders of magnitude in
+        # both directions (SPI: a product of catchment area and slope that
+        # can reach hundreds of millions, with large negatives from
+        # near-flat-cell division) -- the same sign(x)*log1p(|x|) transform
+        # align_data.py already applies before this quantity reaches the
+        # model, so the display matches what the model actually sees rather
+        # than stretching a linear colormap across a scale a plain
+        # percentile clip cannot compress.
+        def signed_log(x):
+            return np.sign(x) * np.log1p(np.abs(x))
+
+        values = signed_log(masked.filled(0.0))
+        valid_sl = signed_log(valid)
+        if valid_sl.size:
+            limit = float(max(abs(np.percentile(valid_sl, 2)), abs(np.percentile(valid_sl, 98))))
+        else:
+            limit = 1.0
+        norm = plt.Normalize(vmin=-limit, vmax=limit)
     elif norm_spec == "symmetric":
         values = masked.filled(0.0)
         if valid.size:

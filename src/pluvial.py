@@ -358,6 +358,12 @@ class PluvialModel:
         self.valid = valid
         self.cell_area_m2 = cell_area_m2
         self.cell_width_m = cell_width_m
+        # Set by build() right after construction below -- declared here
+        # (rather than left as a bare post-hoc `model.profile = ...`) so the
+        # attribute exists on every instance, matching how everything else
+        # in __init__ is declared, and so mypy can see it too.
+        self.profile: dict = {}
+        self.master_profile: dict = {}
 
     # -- construction ------------------------------------------------------
     @classmethod

@@ -32,6 +32,7 @@ from visualization import (
     create_alert_message,
     create_flood_visualization,
     create_legend_html,
+    create_static_visualization,
     pixel_area_km2_from_transform,
     prob_to_png_b64,
     risk_band_masks,
@@ -353,3 +354,52 @@ class TestHydrologyConfigIntegration:
 
     def test_built_up_sheds_more_than_forest(self):
         assert HYDRO.curve_numbers[7] > HYDRO.curve_numbers[2]
+
+
+class TestStaticVisualizationNormalization:
+    """
+    Regression tests for a real rendering bug found during UAT: "SPI" and
+    "Flow Accumulation" rendered as a near-flat colour wash with no visible
+    structure, despite the underlying rasters holding real, informative
+    data. Both stemmed from the same root cause -- normalising to a colour
+    range the actual data never reaches.
+    """
+
+    def test_log_layer_vmin_tracks_the_real_data_not_a_hardcoded_zero(self):
+        """
+        Flow accumulation on this grid never drops below the low thousands
+        (every cell sits somewhere in a real basin). The old code fixed
+        vmin=0 regardless, so log1p(real_min) sat well above vmin and every
+        pixel crowded into a thin slice near the top of the colour range.
+        """
+        data = np.random.default_rng(0).uniform(900.0, 950.0, size=(20, 20)).astype(np.float32)
+        # A few real channel cells, much higher -- what should stand out.
+        data[0, :5] = 5_000_000.0
+
+        rgba, _ = create_static_visualization(data, "Flow Accumulation", None)
+
+        # The channel cells and the background cells must land in visibly
+        # different parts of the colour ramp, not the same crowded corner.
+        channel_colour = rgba[0, 0, :3]
+        background_colour = rgba[10, 10, :3]
+        assert not np.allclose(channel_colour, background_colour, atol=0.05)
+
+    def test_spi_uses_signed_log_matching_the_model_input(self):
+        """
+        align_data.py feeds the model sign(x)*log1p(|x|) of the raw SPI
+        because it "spans ~12 orders of magnitude and carries huge negatives
+        from flat-cell division" (its own comment). The display path used to
+        percentile-clip the *raw* value instead, which does not compress a
+        12-order-of-magnitude spread into a usable colour range.
+        """
+        rng = np.random.default_rng(0)
+        data = rng.uniform(-2000.0, 2000.0, size=(20, 20)).astype(np.float32)
+        data[0, 0] = 4.7e8  # a real magnitude observed in the source raster
+        data[0, 1] = -1.8e8
+
+        rgba, _ = create_static_visualization(data, "SPI", None)
+
+        # Should not raise, should not be all-NaN/constant, and the extreme
+        # opposite-signed cells should land near opposite ends of the ramp.
+        assert np.isfinite(rgba[..., :3]).all()
+        assert not np.allclose(rgba[0, 0, :3], rgba[0, 1, :3], atol=0.05)
