@@ -146,5 +146,40 @@
     "storm_window_days": 3,
     "wettest_day": "2021-10-17",
     "wettest_day_district_mean_mm": 93.6
+  },
+  "2026": {
+    "bbox": {
+      "lat": [
+        9.79,
+        10.3
+      ],
+      "lon": [
+        76.17,
+        76.84
+      ]
+    },
+    "event": "2026",
+    "max_1day_mm": 104.9,
+    "max_1day_window": "2026-08-01..2026-08-01",
+    "max_2day_mm": 158.5,
+    "max_2day_window": "2026-08-01..2026-08-02",
+    "max_3day_mm": 196.5,
+    "max_3day_window": "2026-08-01..2026-08-03",
+    "max_5day_mm": 260.7,
+    "max_5day_window": "2026-07-31..2026-08-04",
+    "max_7day_mm": 306.2,
+    "max_7day_window": "2026-07-31..2026-08-06",
+    "month_total_mm": 569.4,
+    "n_grid_points": 9,
+    "period": [
+      "2026-07-15",
+      "2026-08-15"
+    ],
+    "reference_event_mm": 196.5,
+    "source": "ERA5 reanalysis via Open-Meteo archive API",
+    "storm_window_days": 3,
+    "wettest_day": "2026-08-01",
+    "wettest_day_district_mean_mm": 104.9,
+    "wettest_day_point_max_mm": 137.4
   }
 }

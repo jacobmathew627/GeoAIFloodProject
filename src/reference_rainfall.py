@@ -47,13 +47,17 @@ ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 DISTRICT_BOX = {"lat": (9.79, 10.30), "lon": (76.17, 76.84)}
 
 #: Known Kerala flood events with satellite-derived inundation coverage
-#: (Sentinel-1 for 2018, NDEM for 2018-2021). Month windows match the month
-#: containing each event's NDEM acquisition dates (src/ndem_labels.py EVENTS).
+#: (Sentinel-1 for 2018 and 2026, NDEM for 2018-2021). Month windows match the
+#: month containing each event's acquisition dates (src/ndem_labels.py EVENTS
+#: for NDEM, src/acquire_flood_event.py EVENTS for the Sentinel-1 ones).
 EVENTS: Dict[str, Tuple[str, str]] = {
     "2018": ("2018-08-01", "2018-08-31"),
     "2019": ("2019-08-01", "2019-08-31"),
     "2020": ("2020-08-01", "2020-08-31"),
     "2021": ("2021-10-01", "2021-10-31"),
+    # 2026 Kerala floods: onset late July, peak ~1 Aug. Window starts mid-July
+    # rather than the 1st of the month so a late-July onset is not clipped.
+    "2026": ("2026-07-15", "2026-08-15"),
 }
 
 #: Storm window, in days. Three pairs correctly with AMC III (see module docs).
