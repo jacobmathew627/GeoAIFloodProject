@@ -68,7 +68,21 @@ def render_sidebar(rainfall_cfg, risk_cfg, known_places) -> Dict[str, Any]:
         rainfall = _fetch_live_rainfall(rainfall_cfg)
     if rainfall is None:
         rainfall = float(
-            st.sidebar.slider("Rainfall intensity (mm, 24h)", 0, rainfall_cfg.max_slider, 150)
+            st.sidebar.slider(
+                "Storm rainfall (mm, 3-day total)",
+                0,
+                rainfall_cfg.max_slider,
+                150,
+                help=(
+                    "A 3-day cumulative depth, not a 24-hour figure -- matches "
+                    "what the model was calibrated against (see the reference "
+                    "event below). Ernakulam's documented worst 3-day total is "
+                    f"{rainfall_cfg.reference_event_mm:.0f} mm (15-17 Aug 2018); "
+                    "its worst single day on IMD record is close to 190 mm. "
+                    "Values above the reference are a stress test beyond "
+                    "anything observed in the district."
+                ),
+            )
         )
 
     is_2018 = st.sidebar.checkbox("Simulate the 2018 flood event", value=False)
@@ -127,7 +141,16 @@ def _fetch_model_forecast() -> Optional[float]:
 
 def _fetch_live_rainfall(rainfall_cfg) -> Optional[float]:
     """
-    Fetch the next 24 h forecast precipitation total.
+    Fetch the next 3-day forecast precipitation total.
+
+    The hazard model's rainfall input is a 3-day storm depth (see
+    RainfallConfig.reference_event_mm and _fetch_model_forecast above, which
+    is explicit that "the next 3-day total" is "the same quantity the hazard
+    model takes as input"). This function used to sum only the first 24
+    hours and feed that straight into a model calibrated on a 3-day total --
+    a live forecast of a genuinely severe multi-day storm would have read as
+    roughly a third of its real hazard, silently understating risk relative
+    to the other two rainfall sources on the same sidebar. Now matches them.
 
     Returns None on any failure so the caller falls back to the slider; the
     previous version raised the slider inside the exception handler, which
@@ -140,13 +163,13 @@ def _fetch_live_rainfall(rainfall_cfg) -> Optional[float]:
             "latitude": rainfall_cfg.weather_params["latitude"],
             "longitude": rainfall_cfg.weather_params["longitude"],
             "hourly": "precipitation",
-            "forecast_days": 2,
+            "forecast_days": 3,
         }
         response = requests.get(rainfall_cfg.live_weather_url, params=params, timeout=5)
         response.raise_for_status()
-        hourly = response.json()["hourly"]["precipitation"][:24]
+        hourly = response.json()["hourly"]["precipitation"][:72]
         total = float(sum(v for v in hourly if v is not None))
-        st.sidebar.success(f"Live 24 h forecast: {total:.1f} mm")
+        st.sidebar.success(f"Live 3-day forecast: {total:.1f} mm")
         return total
     except Exception as exc:
         LOGGER.warning("Live weather fetch failed: %s", exc)

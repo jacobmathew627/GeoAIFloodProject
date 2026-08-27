@@ -80,6 +80,8 @@ class LiveGrid:
     basis: Dict[int, np.ndarray]  # class -> upstream cell count
     classes: np.ndarray
     tan_slope: np.ndarray
+    population: np.ndarray  # (H, W) people per display cell (WorldPop), NaN outside the domain
+    building_area: np.ndarray  # (H, W) building footprint m2 per display cell (OSM)
     cell_area_m2: float
     cell_width_m: float
     transform: "Affine"
@@ -144,6 +146,36 @@ def build(max_dim: int = 1000, aligned_dir: Optional[Path] = None) -> LiveGrid:
     lulc = load("lulc", Resampling.nearest)
     slope_deg = load("slope", Resampling.average)
 
+    # -- population and building exposure, resampled with count conservation --
+    # `population_aligned.tif` and `building_area_aligned.tif` each hold a
+    # *count* (people, m2 of footprint) per cell, not a density. An ordinary
+    # average -- what `load()` above uses for slope -- would report the mean
+    # count of the source cells a display cell covers, silently shrinking the
+    # district total by the same downsampling factor used to build `shape`.
+    # Resampling.average followed by rescaling by the cell-area ratio turns
+    # that mean back into a sum -- the same area-ratio trick population.py
+    # uses in the other direction (its 100 m source to this project's 10 m
+    # master grid).
+    def load_conserved(name, fallback_hint):
+        path = aligned_dir / f"{name}_aligned.tif"
+        if not path.exists():
+            LOGGER.warning(
+                "No %s -- figures depending on it fall back to a coarser " "estimate. Run `%s`.",
+                path,
+                fallback_hint,
+            )
+            return np.full(shape, np.nan, dtype=np.float32)
+        with rasterio.open(path) as src:
+            raw = src.read(1, out_shape=shape, resampling=Resampling.average).astype(np.float32)
+            nd = src.nodata if src.nodata is not None else NODATA
+            src_cell_m2 = abs(src.transform.a * src.transform.e)
+        dst_cell_m2 = abs(transform.a * transform.e)
+        ok = np.isfinite(raw) & (raw != np.float32(nd))
+        return np.where(ok, raw * (dst_cell_m2 / src_cell_m2), np.nan).astype(np.float32)
+
+    population = load_conserved("population", "python src/population.py --project <id>")
+    building_area = load_conserved("building_area", "python src/building_exposure.py --build")
+
     LOGGER.info("Deriving the curve number grid...")
     cn = np.full(shape, np.nan, dtype=np.float32)
     valid_lulc = np.isfinite(lulc)
@@ -168,6 +200,8 @@ def build(max_dim: int = 1000, aligned_dir: Optional[Path] = None) -> LiveGrid:
         basis=basis,
         classes=pm.classes,
         tan_slope=tan_slope.astype(np.float32),
+        population=population,
+        building_area=building_area,
         cell_area_m2=abs(transform.a * transform.e),
         cell_width_m=px_w,
         transform=transform,
@@ -202,6 +236,8 @@ def save(grid: LiveGrid, model_dir: Optional[Path] = None) -> Path:
         "susceptibility": grid.susceptibility,
         "curve_number": grid.curve_number,
         "tan_slope": grid.tan_slope,
+        "population": grid.population,
+        "building_area": grid.building_area,
         "classes": np.asarray(grid.classes),
     }
     for k, v in grid.basis.items():
@@ -240,12 +276,27 @@ def load(model_dir: Optional[Path] = None) -> LiveGrid:
         header = json.loads(bytes(z["header_json"]).decode("utf-8"))
         classes = z["classes"]
         basis = {int(k): z[f"basis_{int(k)}"] for k in classes}
+        # "population" postdates the rest of this cache format; a cache built
+        # before src/population.py existed won't have it. Falling back to
+        # all-NaN degrades gracefully to the density-estimate fallback in
+        # create_alert_message() rather than crashing the app on a stale cache.
+        shape = tuple(header["shape"])
+        population = (
+            z["population"] if "population" in z.files else np.full(shape, np.nan, dtype=np.float32)
+        )
+        building_area = (
+            z["building_area"]
+            if "building_area" in z.files
+            else np.full(shape, np.nan, dtype=np.float32)
+        )
         grid = LiveGrid(
             susceptibility=z["susceptibility"],
             curve_number=z["curve_number"],
             basis=basis,
             classes=classes,
             tan_slope=z["tan_slope"],
+            population=population,
+            building_area=building_area,
             cell_area_m2=header["cell_area_m2"],
             cell_width_m=header["cell_width_m"],
             transform=Affine(*header["transform"]),

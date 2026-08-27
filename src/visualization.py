@@ -40,6 +40,7 @@ NODATA = RASTER.nodata_value
 FLOOD_COLOR_STOPS: List[Tuple[float, str]] = list(VIZ.flood_colors)
 FLOOD_COLORMAP = LinearSegmentedColormap.from_list("RiskRamp", FLOOD_COLOR_STOPS)
 
+
 # RGB form of the same ramp, for the byte-level colormap used by the API.
 def _hex_to_rgb(hex_colour: str) -> Tuple[int, int, int]:
     h = hex_colour.lstrip("#")
@@ -245,23 +246,31 @@ def create_alert_message(
     geo,
     risk_cfg,
     transform: Any = None,
+    population: Optional[np.ndarray] = None,
+    building_area: Optional[np.ndarray] = None,
 ) -> Optional[str]:
     """
     Operational alert text derived from the hazard map.
 
-    Areas come from the raster's own geometry. Population and damage figures
-    are first-order planning estimates from district-average density and a
-    per-km2 damage rate -- they are labelled as such in the output rather than
-    presented as model results.
+    Areas come from the raster's own geometry. Population and building value,
+    when WorldPop/OSM grids matching `data`'s shape are supplied, are real
+    spatial sums over the critical-risk cells rather than estimates -- see
+    src/population.py and src/building_exposure.py. Without them (or on a
+    shape mismatch), both fall back to the previous district-average
+    planning estimate.
+
+    The building figure is *exposure* (replacement value of what is mapped
+    in the critical zone), not a damage prediction -- no India-specific
+    depth-damage function was available to discount it to expected loss, so
+    it is not called "damage" and should not be read as one.
     """
     valid = data[data > -9000]
     if valid.size == 0:
         return None
 
-    critical = valid >= risk_cfg.critical
-    elevated = valid >= risk_cfg.moderate
-    crit_pct = float(critical.mean() * 100)
-    risk_pct = float(elevated.mean() * 100)
+    critical_mask = data >= risk_cfg.critical
+    crit_pct = float((valid >= risk_cfg.critical).mean() * 100)
+    risk_pct = float((valid >= risk_cfg.moderate).mean() * 100)
 
     px_km2 = pixel_area_km2_from_transform(transform)
     if px_km2 is None:
@@ -275,11 +284,29 @@ def create_alert_message(
     critical_km2 = mapped_km2 * crit_pct / 100.0
     elevated_km2 = mapped_km2 * risk_pct / 100.0
 
-    est_pop = min(
-        int(critical_km2 * geo.pop_density * risk_cfg.residential_fraction),
-        geo.population,
-    )
-    est_damage_cr = critical_km2 * risk_cfg.damage_per_km2_crores
+    if population is not None and population.shape == data.shape:
+        exposed = population[critical_mask & np.isfinite(population)]
+        est_pop = int(exposed.sum())
+        pop_note = "WorldPop 2020, summed within the critical-risk area"
+    else:
+        est_pop = min(
+            int(critical_km2 * geo.pop_density * risk_cfg.residential_fraction),
+            geo.population,
+        )
+        pop_note = "district-average density x residential fraction, planning estimate"
+
+    if building_area is not None and building_area.shape == data.shape:
+        from building_exposure import RS_PER_M2
+
+        exposed_m2 = float(building_area[critical_mask & np.isfinite(building_area)].sum())
+        est_damage_cr = exposed_m2 * RS_PER_M2 * 1e-7
+        damage_note = (
+            "OSM building footprints x Kerala PWD 2025 rate, replacement value exposed, "
+            "not a damage prediction"
+        )
+    else:
+        est_damage_cr = critical_km2 * risk_cfg.damage_per_km2_crores
+        damage_note = f"at Rs {risk_cfg.damage_per_km2_crores:.0f} Cr/km2, planning estimate"
 
     # Trigger levels are fractions of the mapped area, calibrated against the
     # reference event. The previous version compared these percentages to 15%
@@ -292,10 +319,8 @@ def create_alert_message(
             f"**Critical risk area:** {critical_km2:,.1f} km2 "
             f"({crit_pct:.2f}% of {mapped_km2:,.0f} km2 mapped){area_note}\n\n"
             f"**Elevated risk area:** {elevated_km2:,.1f} km2 ({risk_pct:.2f}%)\n\n"
-            f"**Estimated population exposed:** ~{est_pop:,} "
-            f"(district-average density x residential fraction, planning estimate)\n\n"
-            f"**Indicative damage:** ~Rs {est_damage_cr:,.0f} Cr "
-            f"(at Rs {risk_cfg.damage_per_km2_crores:.0f} Cr/km2, planning estimate)"
+            f"**Estimated population exposed:** ~{est_pop:,} ({pop_note})\n\n"
+            f"**Building value exposed:** ~Rs {est_damage_cr:,.0f} Cr ({damage_note})"
         )
     if risk_pct >= risk_cfg.elevated_area_fraction_warning * 100:
         return (
@@ -303,7 +328,7 @@ def create_alert_message(
             f"**Elevated-risk area:** {elevated_km2:,.1f} km2 "
             f"({risk_pct:.2f}% of {mapped_km2:,.0f} km2 mapped){area_note}\n\n"
             f"**Critical-class area:** {critical_km2:,.1f} km2\n\n"
-            f"**Estimated population exposed:** ~{est_pop:,} (planning estimate)"
+            f"**Estimated population exposed:** ~{est_pop:,} ({pop_note})"
         )
     return (
         f"**MONITORING ACTIVE** | Rainfall: {rainfall:.0f} mm | "

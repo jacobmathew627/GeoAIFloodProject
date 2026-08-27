@@ -74,3 +74,13 @@ data/ndem/
 
 # OSM drainage cache (regenerable: python src/osm_drainage.py --build)
 data/osm/
+
+# WorldPop population cache (regenerable: python src/population.py --project <id>)
+data/worldpop/
+
+# Upstream-routing scratch DEM -- a working copy of the already-gitignored
+# GeoAI_New/Upstream_DEM.tif, kept by src/upstream_routing.py's WORK_DIR as a
+# cache so a rerun does not repeat the ~70-90 min depression-breaching step.
+# The routing itself is finished and committed (data_aligned/flow_aligned.tif);
+# this is just its scratch input.
+GeoAI_New/routing_work/

@@ -112,6 +112,13 @@ class RainfallConfig:
     """Rainfall scenario configuration."""
 
     scenarios: tuple = (50, 100, 150, 200, 250, 300, 400, 443, 500)
+    # All rainfall inputs on this axis are a 3-day cumulative depth, not a
+    # 24-hour figure -- matching reference_event_mm below and what
+    # HYDRO.amc's antecedent-wetness window expects. 600 sits above the
+    # documented worst 3-day total for the district (443 mm, Aug 2018) on
+    # purpose, as a stress-test ceiling; it would be an absurd 24-hour figure
+    # (nothing recorded in Ernakulam has ever approached even half that in a
+    # single day) but is a defensible, if severe, multi-day depth.
     max_slider: int = 600
     live_weather_url: str = "https://api.open-meteo.com/v1/forecast"
     weather_params: dict = field(
@@ -119,7 +126,7 @@ class RainfallConfig:
             "latitude": 10.0,
             "longitude": 76.3,
             "hourly": "precipitation",
-            "forecast_days": 2,
+            "forecast_days": 3,
         }
     )
 

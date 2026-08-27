@@ -1,5 +1,9 @@
 # Data request: KSDMA waterlogging incident records
 
+**Status: sent 2026-08-27.** Follow up once after two weeks (by
+2026-09-10) if there is no reply; see the RTI fallback below if that
+follow-up also goes unanswered.
+
 **Why this matters more than any other request in this project.** The model
 predicts flood *inundation* well (spatial-block AUC 0.824) but cannot predict
 urban *waterlogging*, because no free dataset records it. Of 14 locations

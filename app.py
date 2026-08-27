@@ -201,7 +201,9 @@ if data is not None and meta is not None:
     if layer_type == "Flood Probability (live)":
         image_rgba, legend_items = create_flood_visualization(data, VIZ, RISK)
         title = f"Inundation probability at {rainfall:.0f} mm"
-        alert_msg = create_alert_message(data, rainfall, GEO, RISK, transf)
+        alert_msg = create_alert_message(
+            data, rainfall, GEO, RISK, transf, grid.population, grid.building_area
+        )
         if alert_msg:
             if "CRITICAL" in alert_msg:
                 alert_placeholder.error(alert_msg)

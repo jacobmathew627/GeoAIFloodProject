@@ -122,6 +122,12 @@ def grid():
         7: rng.uniform(1, 500, size=(h, w)).astype(np.float32),
     }
     cn = np.where(np.isfinite(susc), 88.0, np.nan).astype(np.float32)
+    population = np.where(np.isfinite(susc), rng.uniform(0, 5, size=(h, w)), np.nan).astype(
+        np.float32
+    )
+    building_area = np.where(np.isfinite(susc), rng.uniform(0, 100, size=(h, w)), np.nan).astype(
+        np.float32
+    )
 
     return LiveGrid(
         susceptibility=susc,
@@ -129,6 +135,8 @@ def grid():
         basis=basis,
         classes=classes,
         tan_slope=np.full((h, w), 0.02, dtype=np.float32),
+        population=population,
+        building_area=building_area,
         cell_area_m2=100.0,
         cell_width_m=10.0,
         transform=Affine(10.0, 0.0, 600000.0, 0.0, -10.0, 1100000.0),
