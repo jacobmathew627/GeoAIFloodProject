@@ -7,6 +7,11 @@
 #   app       Streamlit dashboard        -> port 8501   (default target)
 #   api       FastAPI scenario/stats API -> port 8000
 #
+# Stage order matters: `app` is LAST deliberately. Hugging Face Spaces builds a
+# Dockerfile with no --target and takes the final stage, so whichever stage ends
+# the file is what gets deployed there. `docker build --target api .` still
+# selects the backend explicitly, and docker-compose.yml names both.
+#
 # Two things dominate an image like this: the data it carries and the build
 # toolchain it forgets to drop. Both are addressed here.
 #
@@ -112,12 +117,45 @@ assert 75.0 < lon < 78.0 and 9.0 < lat < 11.5, f"reprojection wrong: {lon}, {lat
 print(f"runtime probe OK: rasterio {rasterio.__version__}, GDAL {rasterio.__gdal_version__}")
 PROBE
 
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# A fixed UID rather than a system account: Hugging Face Spaces runs the
+# container expecting uid 1000 to own the app directory, and on a Linux host
+# a bind mount from the usual first user lines up too.
+RUN groupadd -g 1000 appuser && useradd -m -u 1000 -g appuser appuser
 WORKDIR /app
 RUN chown -R appuser:appuser /app
 
 # ═══════════════════════════════════════════════
-# Stage 3: Streamlit dashboard (default target)
+# Stage 3: FastAPI backend
+# ═══════════════════════════════════════════════
+FROM runtime AS api
+
+COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser serve.py ./
+COPY --chown=appuser:appuser static/ ./static/
+COPY --chown=appuser:appuser models/*.json ./models/
+
+# Same live model the dashboard uses. This replaces the ~530 MB of
+# pre-generated per-scenario rasters the API used to ship: backend.load_hazard
+# now evaluates on demand from this 7 MB cache when no full-resolution raster
+# is present, which also lets /api/map/{mm} answer any depth instead of only
+# the nine that had been generated ahead of time.
+COPY --chown=appuser:appuser models/live_model.npz ./models/
+COPY --chown=appuser:appuser outputs/conformal_sets.tif ./outputs/
+
+USER appuser
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health || exit 1
+
+# uvicorn directly rather than through serve.py: serve.py shells out to a child
+# process, which would leave uvicorn unable to receive SIGTERM as PID 1 and make
+# container stops fall back to SIGKILL after the grace period.
+WORKDIR /app/src
+CMD ["python", "-m", "uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# ═══════════════════════════════════════════════
+# Stage 4: Streamlit dashboard -- LAST ON PURPOSE, see note above
 # ═══════════════════════════════════════════════
 FROM runtime AS app
 
@@ -158,33 +196,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # regardless of how the image's scripts directory is laid out.
 CMD ["python", "-m", "streamlit", "run", "app.py", \
      "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
-
-# ═══════════════════════════════════════════════
-# Stage 4: FastAPI backend
-# ═══════════════════════════════════════════════
-FROM runtime AS api
-
-COPY --chown=appuser:appuser src/ ./src/
-COPY --chown=appuser:appuser serve.py ./
-COPY --chown=appuser:appuser static/ ./static/
-COPY --chown=appuser:appuser models/*.json ./models/
-
-# Same live model the dashboard uses. This replaces the ~530 MB of
-# pre-generated per-scenario rasters the API used to ship: backend.load_hazard
-# now evaluates on demand from this 7 MB cache when no full-resolution raster
-# is present, which also lets /api/map/{mm} answer any depth instead of only
-# the nine that had been generated ahead of time.
-COPY --chown=appuser:appuser models/live_model.npz ./models/
-COPY --chown=appuser:appuser outputs/conformal_sets.tif ./outputs/
-
-USER appuser
-EXPOSE 8000
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
-
-# uvicorn directly rather than through serve.py: serve.py shells out to a child
-# process, which would leave uvicorn unable to receive SIGTERM as PID 1 and make
-# container stops fall back to SIGKILL after the grace period.
-WORKDIR /app/src
-CMD ["python", "-m", "uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "8000"]

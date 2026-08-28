@@ -954,6 +954,36 @@ open — the dashboard evaluates hazard live instead. Running both from one
 container would mean shipping both data sets and supervising two servers under
 PID 1; `docker-compose.yml` runs them as two services.
 
+### Publishing to Hugging Face Spaces
+
+```bash
+pip install huggingface_hub
+python deploy/push_to_space.py --dry-run                      # list the payload first
+python deploy/push_to_space.py --space <user>/<name> --token hf_...
+```
+
+The token needs *write* scope (<https://huggingface.co/settings/tokens>); it is
+never written to disk. `--dry-run` assembles and lists the payload without
+creating or pushing anything.
+
+Two things this has to work around, both verified rather than assumed:
+
+- **Spaces builds a Dockerfile with no `--target`**, taking whichever stage ends
+  the file. The `app` stage is therefore last on purpose. Simulated locally with
+  a bare `docker build .`: it produces the dashboard, serving on 8501 as uid
+  1000. Reordering does not affect `--target api` or `docker-compose.yml`.
+- **The Space needs artefacts this repo does not track.** `display/`,
+  `models/live_model.npz` and `outputs/conformal_sets.tif` are derived and
+  gitignored. Rather than reversing that, `deploy/push_to_space.py` assembles a
+  self-contained Space repo in a temp directory — tracked source plus 33.5 MB of
+  runtime artefacts, with `GeoAI_New/`, `data_aligned/`, `data/`, `tests/` and
+  the per-scenario hazard rasters excluded. GitHub stays source-only.
+
+The Space's `README.md` comes from `deploy/SPACE_README.md`, whose YAML
+front-matter (`sdk: docker`, `app_port: 8501`) is what tells Spaces how to run
+it. That front-matter is required and its absence is why the March 2026
+Dockerfile-only attempt could not have worked.
+
 ### Deployment notes
 
 - Both images run as a non-root user and declare a `HEALTHCHECK`.
