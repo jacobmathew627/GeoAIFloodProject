@@ -10,7 +10,12 @@ A flood-risk model for Ernakulam district, Kerala. Move a rainfall slider and th
 map recomputes from the model — nothing is interpolated between pre-rendered
 images.
 
-Every number in this file is reproduced from the code or a committed artefact.
+**New here?** [**How it works**](docs/HOW_IT_WORKS.md) is a plain-language walkthrough
+of the data going in, what the machine learning actually does, what every layer in
+the app means, and what comes out. Start there. This file is the technical
+reference.
+
+Every number in both files is reproduced from the code or a committed artefact.
 Where a figure could not be regenerated, it says so.
 
 ---
