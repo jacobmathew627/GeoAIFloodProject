@@ -14,6 +14,14 @@ import catchment_graph
 from graph_model import DirectedSAGELayer, FlowGNN, GraphDataset, _standardise
 from routing import _topological_order, d8_receivers
 
+# torch is a `legacy` extra (requirements-legacy.txt); neither the app nor CI
+# installs it, because the graph model was evaluated and rejected. Importing it
+# here would raise during collection, and pytest reports a collection error as
+# an INTERNALERROR -- aborting the whole suite, not just this module.
+# tests/conftest.py therefore adds this file to collect_ignore when torch is
+# absent, which is why these imports can stay plain. See the comment there for
+# why collect_ignore rather than importorskip.
+
 
 class _FakeNet:
     """A minimal stand-in for routing.FlowNetwork over a synthetic DEM."""
