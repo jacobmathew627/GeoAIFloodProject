@@ -1,0 +1,24 @@
+# Optional local authoring tools. NOT installed by CI and not needed to run,
+# test or deploy anything in this repository.
+#
+# These were in requirements-dev.txt, which CI installs. Nothing here is used
+# by ruff, black, mypy or pytest; there is no mkdocs.yml and no notebooks. The
+# only thing they contributed was a version conflict that made the whole file
+# unresolvable and took CI down:
+#
+#     mkdocs==1.5.0  vs  mkdocs-material==9.5.0, which requires mkdocs>=1.5.3
+#
+# The mkdocs pin below is corrected. Install only if you actually want to
+# author docs or use a notebook:
+#
+#     pip install -r requirements-optional.txt
+
+# Documentation site (no mkdocs.yml exists yet -- this is scaffolding for one)
+mkdocs==1.6.1
+mkdocs-material==9.5.0
+mkdocstrings[python]==0.25.0
+
+# Interactive exploration
+ipython==8.24.0
+jupyter==1.0.0
+notebook==7.1.0

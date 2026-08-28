@@ -1,5 +1,17 @@
-# Development dependencies for GeoAI Flood Risk Project
+# Development dependencies: exactly what CI installs and runs.
 # Install with: pip install -r requirements-dev.txt
+#
+# Scope note. This file used to also carry mkdocs, mkdocs-material,
+# mkdocstrings, ipython, jupyter and notebook. CI installs this file to run
+# ruff, black, mypy and pytest -- it uses none of those six, there is no
+# mkdocs.yml in the repository and no notebooks, and one of them
+# (mkdocs==1.5.0 against mkdocs-material==9.5.0, which requires mkdocs>=1.5.3)
+# made the whole file unresolvable. That took down "Install dependencies" in
+# both CI jobs on the first run that ever executed.
+#
+# They now live in requirements-optional.txt with working pins. Keeping this
+# file to what CI actually uses means a broken pin in optional tooling can no
+# longer stop the tests from running.
 
 # Core (already in requirements.txt)
 -r requirements.txt
@@ -25,13 +37,3 @@ pre-commit==3.7.0
 # Type stubs
 types-requests==2.31.0
 types-Pillow==10.0.0
-
-# Development tools
-ipython==8.24.0
-jupyter==1.0.0
-notebook==7.1.0
-
-# Documentation
-mkdocs==1.5.0
-mkdocs-material==9.5.0
-mkdocstrings[python]==0.25.0
