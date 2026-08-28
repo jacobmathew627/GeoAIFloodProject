@@ -133,17 +133,78 @@ class TestRunoff:
 
 
 class TestErrorHandling:
-    def test_absent_scenario_is_404_with_guidance(self, client):
-        r = client.get("/api/map/9999")
-        assert r.status_code == 404
-        # The message must say how to produce the missing artefact.
-        assert "hazard" in r.json()["detail"].lower()
+    @pytest.mark.parametrize("route", ["/api/map", "/api/risk_stats"])
+    def test_absurd_depth_is_422_not_a_computed_answer(self, client, route):
+        """
+        9999 mm used to return 404 only because no such raster existed. Once
+        load_hazard could evaluate any depth live, that accident of packaging
+        stopped bounding the input -- so the bound is now explicit, and matches
+        the ge/le already on /api/runoff.
+        """
+        assert client.get(f"{route}/9999").status_code == 422
 
-    def test_absent_scenario_stats_is_404(self, client):
-        assert client.get("/api/risk_stats/9999").status_code == 404
+    @pytest.mark.parametrize("route", ["/api/map", "/api/risk_stats"])
+    def test_negative_depth_is_422(self, client, route):
+        assert client.get(f"{route}/-5").status_code == 422
 
     def test_non_integer_scenario_is_422(self, client):
         assert client.get("/api/map/abc").status_code == 422
+
+    def test_missing_artefacts_yield_404_with_guidance(self, client, monkeypatch):
+        """
+        With neither a raster nor a live model, the API must still say what to
+        run rather than 500. Simulated by forcing the live-model lookup to
+        report absent, since this checkout has one.
+        """
+        import backend
+
+        backend.load_hazard.cache_clear()
+        monkeypatch.setattr(backend, "_live_grid", lambda: None)
+        monkeypatch.setattr(backend, "hazard_path", lambda mm: Path("does_not_exist.tif"))
+        try:
+            r = client.get("/api/map/137")
+            assert r.status_code == 404
+            assert "hazard" in r.json()["detail"].lower()
+        finally:
+            backend.load_hazard.cache_clear()
+
+
+@pytest.mark.requires_model
+class TestLiveEvaluationFallback:
+    """
+    The API used to answer only for depths that had been pre-generated. It now
+    evaluates any depth in range from live_model.npz, which is what let the
+    image drop ~530 MB of rasters.
+    """
+
+    def test_serves_a_depth_that_was_never_pre_generated(self, client):
+        import backend
+
+        if backend._live_grid() is None:
+            pytest.skip("no live model built")
+        # 137 mm is not in RAINFALL.scenarios and has no raster on disk.
+        assert not (OUTPUT_DIR / "flood_hazard_137mm.tif").exists()
+        r = client.get("/api/map/137")
+        assert r.status_code == 200
+        assert r.json()["image_b64"]
+
+    def test_response_declares_which_grid_produced_it(self, client):
+        import backend
+
+        if backend._live_grid() is None:
+            pytest.skip("no live model built")
+        r = client.get("/api/risk_stats/137")
+        assert r.status_code == 200
+        assert r.json()["resolution"] in ("full", "display")
+
+    def test_live_path_percentages_still_sum_to_100(self, client):
+        import backend
+
+        if backend._live_grid() is None:
+            pytest.skip("no live model built")
+        body = client.get("/api/risk_stats/137").json()
+        total = sum(v for k, v in body.items() if k.endswith("_pct"))
+        assert total == pytest.approx(100.0, abs=0.5)
 
 
 @pytest.mark.requires_model

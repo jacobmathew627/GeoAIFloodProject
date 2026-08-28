@@ -23,7 +23,7 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import rasterio
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Path as PathParam, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -66,33 +66,105 @@ app.add_middleware(
 # ──────────────────────────────────────────────
 # Raster access
 # ──────────────────────────────────────────────
+#: Upper bound on a requested storm depth, matching the /api/runoff query
+#: bound. Until load_hazard gained a live-evaluation fallback these routes were
+#: implicitly bounded by which rasters happened to exist on disk, so an absurd
+#: depth returned 404. Now that any depth can be evaluated, the bound has to be
+#: stated: 2000 mm is already far beyond the 443 mm reference event and well
+#: past anything in the Indian instrumental record.
+MAX_RAINFALL_MM = 2000
+
+
 def hazard_path(rainfall_mm: int) -> Path:
     return OUTPUT_DIR / f"flood_hazard_{int(rainfall_mm)}mm.tif"
 
 
+@lru_cache(maxsize=1)
+def _live_grid():
+    """
+    The precomputed live model, or None if it is not deployed.
+
+    Cached at size 1 because it is ~7 MB of arrays and entirely
+    rainfall-independent -- the whole point of live_model is that a new
+    rainfall value costs array arithmetic, not a reload.
+    """
+    try:
+        import live_model
+
+        return live_model.load()
+    except FileNotFoundError:
+        return None
+
+
 @lru_cache(maxsize=8)
 def load_hazard(rainfall_mm: int) -> tuple:
-    """Load a hazard raster. Cached: these are 42M-pixel files."""
+    """
+    Hazard surface for a storm depth.
+
+    Two sources, in order:
+
+    1. A pre-generated full-resolution raster in outputs/, if one exists for
+       exactly this depth. That is the 42M-pixel product of src/hazard.py and
+       is what a local checkout with the full pipeline will serve.
+    2. Otherwise, evaluated live from models/live_model.npz on the display
+       grid, exactly as the dashboard does.
+
+    The fallback is what makes the API image deployable. Shipping the
+    pre-generated rasters meant carrying ~530 MB for nine fixed depths, while
+    the dashboard was already computing the same quantity on demand from a
+    7 MB cache. It also removes a real limitation rather than just saving
+    space: /api/map/{mm} used to 404 for any depth that had not been
+    pre-generated, so the API answered nine questions and the dashboard
+    answered all of them. Both now answer all of them.
+
+    The two paths differ in resolution, not in formulation -- live_model's
+    fluvial_probability() and hazard.py's combine() are the same routed call
+    (see live_model.fluvial_probability). Statistics computed from the live
+    path are therefore over ~0.39M display cells rather than ~42M full-
+    resolution ones; the percentages agree closely but are not bit-identical,
+    and `resolution` in the response says which path produced them.
+    """
     path = hazard_path(rainfall_mm)
-    if not path.exists():
+    if path.exists():
+        with rasterio.open(path) as src:
+            data = src.read(1).astype(np.float32)
+            bounds = src.bounds
+            crs = str(src.crs)
+            transform = src.transform
+            nd = src.nodata if src.nodata is not None else RASTER.nodata_value
+
+        data[~np.isfinite(data)] = RASTER.nodata_value
+        data[data == np.float32(nd)] = RASTER.nodata_value
+        return data, bounds, crs, transform, "full"
+
+    grid = _live_grid()
+    if grid is None:
         raise FileNotFoundError(
-            f"No hazard map for {rainfall_mm} mm. "
-            "Run `python src/susceptibility.py --train --predict` then `python src/hazard.py`."
+            f"No hazard map for {rainfall_mm} mm and no live model to evaluate one. "
+            "Run `python src/susceptibility.py --train --predict` then "
+            "`python src/live_model.py --build`."
         )
 
-    with rasterio.open(path) as src:
-        data = src.read(1).astype(np.float32)
-        bounds = src.bounds
-        crs = str(src.crs)
-        transform = src.transform
-        nd = src.nodata if src.nodata is not None else RASTER.nodata_value
+    import live_model
 
-    data[~np.isfinite(data)] = RASTER.nodata_value
-    data[data == np.float32(nd)] = RASTER.nodata_value
-    return data, bounds, crs, transform
+    data = live_model.fluvial_probability(grid, float(rainfall_mm))
+    # The live model marks the outside of the domain with NaN; the raster path
+    # and everything downstream (mask_nodata, compute_risk_stats) expect the
+    # -9999 sentinel.
+    data = np.where(np.isfinite(data), data, RASTER.nodata_value).astype(np.float32)
+    return data, grid.bounds, str(grid.crs), grid.transform, "display"
 
 
 def available_scenarios() -> list:
+    """
+    Depths the API can answer for.
+
+    With a live model deployed that is every configured scenario, because each
+    one is evaluated on demand. Without it, only those with a pre-generated
+    raster on disk.
+    """
+    if _live_grid() is not None:
+        return [mm for mm in RAINFALL.scenarios]
     return [mm for mm in RAINFALL.scenarios if hazard_path(int(mm)).exists()]
 
 
@@ -106,6 +178,7 @@ def health() -> Dict[str, Any]:
     return {
         "status": "ok" if scenarios else "degraded",
         "hazard_scenarios_available": len(scenarios),
+        "live_model_present": _live_grid() is not None,
         "susceptibility_model_present": model_file.exists(),
         "susceptibility_surface_present": (OUTPUT_DIR / "susceptibility.tif").exists(),
         "output_dir": str(OUTPUT_DIR),
@@ -148,10 +221,10 @@ def model_card() -> Dict[str, Any]:
 
 
 @app.get("/api/map/{mm}")
-def get_map(mm: int) -> JSONResponse:
+def get_map(mm: int = PathParam(..., ge=0, le=MAX_RAINFALL_MM)) -> JSONResponse:
     """Hazard overlay as a base64 PNG plus WGS84 bounds for Leaflet."""
     try:
-        data, bounds, crs, _ = load_hazard(mm)
+        data, bounds, crs, _, resolution = load_hazard(mm)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -166,19 +239,23 @@ def get_map(mm: int) -> JSONResponse:
             "rainfall_mm": mm,
             "image_b64": prob_to_png_b64(data),
             "bounds": [[lat_min, lon_min], [lat_max, lon_max]],
+            "resolution": resolution,
         }
     )
 
 
 @app.get("/api/risk_stats/{mm}")
-def risk_stats(mm: int) -> Dict[str, Any]:
+def risk_stats(mm: int = PathParam(..., ge=0, le=MAX_RAINFALL_MM)) -> Dict[str, Any]:
     try:
-        data, _, _, transform = load_hazard(mm)
+        data, _, _, transform, resolution = load_hazard(mm)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     stats = compute_risk_stats(data, RISK, transform)
     stats["rainfall_mm"] = mm
+    # Areas are derived from the transform, so they are correct either way, but
+    # a caller comparing two responses should know which grid produced them.
+    stats["resolution"] = resolution
     return stats
 
 

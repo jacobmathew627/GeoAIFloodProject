@@ -169,9 +169,12 @@ COPY --chown=appuser:appuser serve.py ./
 COPY --chown=appuser:appuser static/ ./static/
 COPY --chown=appuser:appuser models/*.json ./models/
 
-# Unlike the dashboard, the API serves the pre-generated per-scenario hazard
-# rasters (~530 MB) -- see backend.load_hazard -- plus the conformal raster.
-COPY --chown=appuser:appuser outputs/flood_hazard_*.tif ./outputs/
+# Same live model the dashboard uses. This replaces the ~530 MB of
+# pre-generated per-scenario rasters the API used to ship: backend.load_hazard
+# now evaluates on demand from this 7 MB cache when no full-resolution raster
+# is present, which also lets /api/map/{mm} answer any depth instead of only
+# the nine that had been generated ahead of time.
+COPY --chown=appuser:appuser models/live_model.npz ./models/
 COPY --chown=appuser:appuser outputs/conformal_sets.tif ./outputs/
 
 USER appuser
