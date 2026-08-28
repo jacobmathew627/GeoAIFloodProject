@@ -30,11 +30,18 @@ them would launder the weaker validation into the stronger one's credibility:
             calibrated -- but no longer untested: against the 14 documented
             hotspots vs. an elevation-matched urban background it scores
             AUC 0.807 (95% CI 0.698-0.908), and proximity to a mapped drain
-            or canal alone gets AUC 0.713 (canals in this city are tidal and
+            or canal alone gets AUC ~0.70 (canals in this city are tidal and
             back up, so *closer* is worse, not better -- see
             src/osm_drainage.py). The control is a proxy, not real incident
             records, since none exist for this district yet. Use it to rank,
             never as a probability.
+
+            On that ~0.70: an earlier run recorded 0.713, and re-deriving it
+            with the committed helpers in waterlogging_validation gives 0.698
+            (95% CI 0.555-0.840). The original is not regenerable from any
+            committed artefact -- waterlogging_validation.evaluate() scores
+            only the fluvial and pluvial surfaces -- so the direction is the
+            finding and the exact figure is not.
 """
 
 from __future__ import annotations

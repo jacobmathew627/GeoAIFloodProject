@@ -61,11 +61,26 @@ class TestBbox:
 class TestDrainageDirectionOfEffect:
     """
     Measured against the 14 documented hotspots with an elevation-matched
-    urban background:
+    urban background. Originally recorded as:
 
         far from a drain     AUC 0.287
         sparse drainage      AUC 0.328
         NEAR a canal         AUC 0.713  (95% CI 0.566-0.855)
+
+    Re-derived later with the committed helpers in waterlogging_validation
+    (bootstrap_auc over the same elevation-matched background):
+
+        NEAR a canal         AUC 0.698  (95% CI 0.555-0.840)
+        drainage density     AUC 0.652
+
+    The original run is not reproducible from anything committed --
+    waterlogging_validation.evaluate() scores only the fluvial and pluvial
+    surfaces, so the drainage numbers came from an ad-hoc script that was not
+    kept. Treat ~0.70 as the figure and the *direction* as the finding.
+
+    Note also that the "far from a drain" row is not simply one minus the
+    "near" row: sample_at takes the maximum within 150 m, so negating the
+    surface changes which pixel is sampled and the two are not symmetric.
 
     Hotspots sit a median 304 m from a mapped channel against 701 m for
     background, with roughly twice the drainage density. Kochi's canals are
