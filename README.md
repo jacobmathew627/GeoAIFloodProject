@@ -695,6 +695,25 @@ These are modelling choices, not measurements. Each is a single constant in
 
 ## Known limitations
 
+- **The land cover is from 2018, and the district has since grown 23%.**
+  Measured, not asserted: Google Dynamic World puts Ernakulam's built-up area
+  at 691 km² in 2018 and 852 km² in 2025 — **+23.3%, +161 km²**
+  (`python src/landcover_drift.py`, cached in `models/landcover_drift.json`).
+  Built-up surfaces carry a far higher curve number, so on ground developed
+  since 2018 the model routes less runoff than the surface now produces and
+  **understates present-day risk there**.
+
+  The fix is not a data refresh. 2018 land cover is the *correct* land cover
+  for training: the labels are the August 2018 flood inventory, and the
+  features have to describe the surface that produced those floods. Swapping in
+  2025 land cover and retraining would misalign features from labels — a worse
+  error than the one it corrects. Doing this properly means separating the
+  training epoch from the inference epoch (train the susceptibility surface on
+  2018, evaluate runoff over current land cover), which is a temporal-transfer
+  design change and is not attempted here. The app states the gap in its
+  Advanced panel rather than letting a low number for a newly built-up ward
+  pass without comment.
+
 - **Susceptibility is trained on 2018 alone; `beta` leans on 2021 alone.**
   Training uses `ndem_flood_2018` exclusively — the prior offset is fitted to
   reproduce the same event the model was trained on, so "expected area equals

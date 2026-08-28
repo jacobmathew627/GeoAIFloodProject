@@ -52,6 +52,7 @@ def render_sidebar(rainfall_cfg, risk_cfg, known_places) -> Dict[str, Any]:
             "August 2018 Sentinel-1 flood inventory, combined with SCS Curve "
             "Number runoff for the rainfall response."
         )
+        _render_landcover_drift()
 
     st.sidebar.subheader("Rainfall conditions")
 
@@ -99,6 +100,35 @@ def render_sidebar(rainfall_cfg, risk_cfg, known_places) -> Dict[str, Any]:
         "rainfall": rainfall,
         "is_2018": is_2018,
     }
+
+
+def _render_landcover_drift() -> None:
+    """
+    Say how far the model's land cover has drifted from today.
+
+    Not a disclaimer for its own sake: built-up land carries a much higher
+    curve number, so on ground urbanised since the 2018 training epoch the
+    model routes less runoff than the surface now produces and understates
+    risk there. A planner reading a low number for a newly built-up ward
+    should know that before acting on it. Silent when the measurement has
+    never been run (src/landcover_drift.py), rather than inventing a figure.
+    """
+    try:
+        import landcover_drift
+
+        drift = landcover_drift.load()
+        if not drift:
+            return
+        st.sidebar.warning(
+            f"**Land cover is from {drift['model_epoch']}.** Built-up area has "
+            f"grown {drift['drift_pct']:+.0f}% ({drift['drift_km2']:+.0f} km2) "
+            f"since, so risk is understated on land developed after that. The "
+            "2018 surface is correct for *training* -- it is the surface that "
+            "produced the floods the model learned from -- so this is a "
+            "temporal-transfer limit, not a stale file."
+        )
+    except Exception as exc:  # pragma: no cover - advisory panel only
+        LOGGER.info("Land-cover drift unavailable: %s", exc)
 
 
 def _fetch_model_forecast() -> Optional[float]:
