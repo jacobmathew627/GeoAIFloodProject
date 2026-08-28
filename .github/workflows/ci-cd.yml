@@ -137,25 +137,44 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (Streamlit)
+      # `runtime`, not `app`. The app/api stages COPY display/, models/*.npz
+      # and outputs/*.tif, and every one of those is gitignored -- they are
+      # built locally by align_data.py / susceptibility.py / live_model.py /
+      # make_display_rasters.py from ~5 GB of LFS rasters. A clean CI checkout
+      # has none of them, so `target: app` could never have succeeded here; it
+      # would fail at the first COPY of a missing directory. (This predates
+      # the display/ split: the previous Dockerfile COPYd data_aligned/, which
+      # is gitignored for the same reason.)
+      #
+      # What CI *can* verify, and now does: that the Dockerfile parses, that
+      # every pinned dependency resolves and installs on linux/amd64, and that
+      # the runtime stage works without the build toolchain -- the probe baked
+      # into that stage opens a real GeoTIFF and checks its CRS, which is what
+      # catches rasterio/pyproj wheels that need system GDAL after all.
+      #
+      # Building the full application image is a release step run from a
+      # machine that has the artefacts. See the Docker section of README.md.
+      - name: Build runtime image (dependency + GDAL probe)
         uses: docker/build-push-action@v5
         with:
           context: .
-          dockerfile: Dockerfile
-          target: app
-          tags: geoai-flood:latest
+          file: Dockerfile
+          target: runtime
+          tags: geoai-flood-runtime:ci
           load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Test Docker image
+      - name: Test runtime image imports the application modules
         # The src/ modules import each other by bare name (`from config import
         # ...`), so they are imported with src/ on sys.path rather than as a
         # `src.` package -- `import src.config` would fail at the first
-        # intra-module import.
+        # intra-module import. src/ is mounted rather than baked in, because
+        # the runtime stage deliberately contains no application code.
         run: |
-          docker run --rm geoai-flood:latest python -c \
-            "import sys; sys.path.insert(0, 'src'); import config, hydrology, hazard; print('Imports OK')"
+          docker run --rm -v "${{ github.workspace }}/src:/app/src:ro" \
+            geoai-flood-runtime:ci python -c \
+            "import sys; sys.path.insert(0, '/app/src'); import config, hydrology, hazard, visualization, backend; print('Imports OK')"
 
   deploy-staging:
     name: Deploy to Staging
