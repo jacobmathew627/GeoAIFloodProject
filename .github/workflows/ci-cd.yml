@@ -176,27 +176,48 @@ jobs:
             geoai-flood-runtime:ci python -c \
             "import sys; sys.path.insert(0, '/app/src'); import config, hydrology, hazard, visualization, backend; print('Imports OK')"
 
-  deploy-staging:
-    name: Deploy to Staging
+  verify-deployment:
+    name: Verify Live Deployment
     runs-on: ubuntu-latest
     needs: docker-build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: staging
     steps:
-      - name: Deploy to staging
+      # This replaces two jobs named "Deploy to Staging" and "Deploy to
+      # Production" whose only step was `echo "Deploy to ... environment..."`.
+      # They reported success on every run while deploying nothing, and there
+      # is no staging environment to deploy to. A green "Deploy to Production"
+      # that deploys nothing is worse than no job at all -- it is a check that
+      # can only ever pass, next to real checks that can fail.
+      #
+      # The dashboard is hosted on Streamlit Community Cloud, which redeploys
+      # from main on its own; GitHub Actions does not drive it. So the honest
+      # job here is not "deploy" but "confirm what main produced is actually
+      # serving".
+      - name: Wait for the live app to serve the new build
+        # Streamlit Cloud rebuilds asynchronously after a push and puts the app
+        # to sleep when idle, so the first request can be a wake-up. Poll
+        # rather than probing once.
+        #
+        # -L with a cookie jar is required, not incidental: a bare request
+        # returns 303 to a session-cookie endpoint, so without cookies this
+        # check would fail permanently against a perfectly healthy app.
+        # Verified by hand before this job was written -- with the jar it
+        # returns 200 and ~9 kB of HTML.
+        env:
+          APP_URL: https://geoai-waterlogging-project.streamlit.app
         run: |
-          echo "Deploy to staging environment..."
-          # Add your deployment commands here
-          # e.g., kubectl apply, docker-compose up, etc.
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
-    steps:
-      - name: Deploy to production
-        run: |
-          echo "Deploy to production environment..."
-          # Add your production deployment commands here
+          set -u
+          for attempt in $(seq 1 30); do
+            code=$(curl -sL -c /tmp/cj -b /tmp/cj -o /tmp/page.html                      -w '%{http_code}' --max-time 60 "$APP_URL/" || echo 000)
+            size=$(wc -c < /tmp/page.html 2>/dev/null || echo 0)
+            echo "attempt $attempt: HTTP $code, ${size} bytes"
+            if [ "$code" = "200" ] && [ "$size" -gt 1000 ]; then
+              echo "Live app is serving."
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::$APP_URL did not serve a healthy response within ~10 minutes."
+          echo "--- last response head ---"
+          head -c 500 /tmp/page.html || true
+          exit 1
