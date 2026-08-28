@@ -52,28 +52,31 @@ models/susceptibility_model.joblib
 .DS_Store
 Thumbs.db
 
+# ── Deployed runtime artefacts: tracked on purpose ──────────────────────────
+# The four entries below WERE ignored as "derived, regenerable" -- correct
+# reasoning while deployment meant `docker build` from a machine that already
+# had them. It stopped being correct once the app was deployed to Streamlit
+# Community Cloud, which builds from this repository and cannot run the
+# pipeline that produces them. Hugging Face Docker Spaces would have avoided
+# this, but they now require a PRO subscription.
+#
+# Together they are ~32 MB, and .gitattributes keeps the rasters off LFS
+# because Streamlit Cloud does not resolve LFS pointers. Regenerate with:
+#   python src/make_display_rasters.py
+#   python src/live_model.py --build
+#   python src/rainfall_forecast.py --snapshot
+# and see deploy/push_to_space.py for the packaging that does NOT need them
+# committed.
+
 # Derived model rasters (regenerable: susceptibility.py --predict, hazard.py)
 outputs/susceptibility*.tif
-outputs/conformal_sets.tif
 outputs/flood_hazard_*.tif
-
-# Live model cache (regenerable: python src/live_model.py --build)
-models/live_model.npz
-
-# Display-resolution static layers (regenerable: python src/make_display_rasters.py).
-# Derived from GeoAI_New/, same as data_aligned/ and live_model.npz above, so it
-# is built rather than committed -- and *.tif is LFS-tracked here, so committing
-# 14 more of them would spend LFS quota on data one command reproduces.
-# Build this before `docker build`; the image reads it instead of the 3.7 GB of
-# full-resolution originals (see .dockerignore).
-display/
 
 # Upstream DEM mosaic (regenerable: python src/upstream_dem.py --build)
 GeoAI_New/Upstream_DEM.tif
 
 # IMD rainfall cache (regenerable via imdlib)
 data/imd_rain/
-models/rainfall_forecast.joblib
 
 # Acquired flood inventories (regenerable: src/acquire_flood_event.py)
 GeoAI_New/Flood_Extent_*.tif
